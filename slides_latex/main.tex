@@ -1,0 +1,556 @@
+\documentclass[aspectratio=169, 10pt]{beamer}
+
+% ==============================================================================
+% CS231 - NHẬP MÔN THỊ GIÁC MÁY TÍNH (UIT - VNUHCM)
+% SLIDE BÁO CÁO ĐỒ ÁN: ĐỐI SÁNH THỊ GIÁC CỔ ĐIỂN (HAND-CRAFTED) VÀ HỌC SÂU (CNN)
+% ==============================================================================
+
+% Tương thích bộ gõ tiếng Việt cho cả XeLaTeX, LuaLaTeX và pdfLaTeX
+\usepackage{iftex}
+\ifXeTeX
+  \usepackage{fontspec}
+  \setmainfont{Times New Roman}
+\else\ifLuaTeX
+  \usepackage{fontspec}
+  \setmainfont{Times New Roman}
+\else
+  \usepackage[utf8]{inputenc}
+  \usepackage[vietnamese]{babel}
+\fi\fi
+
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{amsmath, amssymb}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc, fit, backgrounds}
+\usepackage{tcolorbox}
+\usepackage{xcolor}
+
+% --- CẤU HÌNH THEME & BẢNG MÀU CHUẨN UIT ---
+\usetheme{Madrid}
+\usecolortheme{whale}
+
+% Màu thương hiệu UIT & Màu Phân loại Rác
+\definecolor{UITBlue}{HTML}{004B87}       % Xanh dương UIT chính
+\definecolor{UITDark}{HTML}{00284D}       % Xanh navy đậm
+\definecolor{GreenRecycle}{HTML}{2E7D32}  % Xanh lá rác hữu cơ
+\definecolor{BlueRecycle}{HTML}{1565C0}   % Xanh dương rác tái chế
+\definecolor{AccentRed}{HTML}{C62828}     % Đỏ cảnh báo/lỗi
+\definecolor{LightGray}{HTML}{F4F6F9}     % Xám nền dịu mắt
+
+\setbeamercolor{palette primary}{bg=UITBlue, fg=white}
+\setbeamercolor{palette secondary}{bg=UITDark, fg=white}
+\setbeamercolor{palette tertiary}{bg=UITBlue!85, fg=white}
+\setbeamercolor{structure}{fg=UITBlue}
+\setbeamercolor{title}{bg=UITBlue, fg=white}
+\setbeamercolor{frametitle}{bg=UITBlue, fg=white}
+\setbeamercolor{block title}{bg=UITBlue, fg=white}
+\setbeamercolor{block body}{bg=LightGray, fg=black}
+
+\setbeamertemplate{navigation symbols}{} % Ẩn thanh điều hướng mặc định
+\setbeamertemplate{headline}{}
+
+% Định dạng Footer sạch đẹp
+\setbeamertemplate{footline}{
+  \leavevmode%
+  \hbox{%
+    \begin{beamercolorbox}[wd=.333333\paperwidth,ht=2.5ex,dp=1ex,left,leftskip=2ex]{palette secondary}%
+      CS231 - Thị giác máy tính (UIT)
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.333333\paperwidth,ht=2.5ex,dp=1ex,center]{palette secondary}%
+      Phân loại rác sinh hoạt đơn lẻ
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.333333\paperwidth,ht=2.5ex,dp=1ex,right,rightskip=2ex]{palette secondary}%
+      Trang \insertframenumber{} / \inserttotalframenumber
+    \end{beamercolorbox}%
+  }%
+  \vskip0pt%
+}
+
+% ==============================================================================
+% THÔNG TIN BÀI BÁO CÁO
+% ==============================================================================
+\title[\textbf{CS231 - Đồ án Cuối kỳ}]{\textbf{PHÂN LOẠI RÁC THẢI RẮN SINH HOẠT ĐƠN LẺ TẠI NGUỒN}}
+\subtitle{Nghiên cứu Đối sánh: Trích xuất Đặc trưng Thủ công (ML) vs Mạng Tích chập Sâu (CNN)}
+
+\author[Nhóm 2 Thành viên]{
+  \textbf{Thành viên 1:} Nguyễn Văn A - MSSV: 2252xxxx \\
+  \textbf{Thành viên 2:} Trần Thị B - MSSV: 2252yyyy
+}
+\institute[UIT - VNUHCM]{
+  Khoa Khoa học Máy tính -- Trường Đại học Công nghệ Thông tin, ĐHQG-HCM \\
+  \textbf{Giảng viên hướng dẫn:} PGS. TS. / ThS. [Tên Giảng Viên]
+}
+\date{Tháng 12 / 2026}
+
+% ==============================================================================
+% NỘI DUNG SLIDES
+% ==============================================================================
+\begin{document}
+
+% ------------------------------------------------------------------------------
+% SLIDE 1: TRANG TIÊU ĐỀ
+% ------------------------------------------------------------------------------
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+% ------------------------------------------------------------------------------
+% SLIDE 2: ĐẶT VẤN ĐỀ & ĐẶC TẢ INPUT / OUTPUT
+% ------------------------------------------------------------------------------
+\begin{frame}{1. Đặt Vấn Đề \& Đặc Tả Bài Toán (Input - Output)}
+\begin{columns}[T]
+  \begin{column}{0.48\textwidth}
+    \begin{tcolorbox}[colback=white, colframe=UITBlue, title=\textbf{Input (Đầu vào)}]
+      \begin{itemize}
+        \item \textbf{Offline (Dataset):} File ảnh tĩnh `.jpg`/`.png`.
+        \item \textbf{Real-time (Webcam):} Luồng $640 \times 480$ @ 30 FPS $\rightarrow$ Crop ROI tâm $300 \times 300$.
+        \item \textbf{Chuẩn hóa chung:} $I \in \mathbb{R}^{224 \times 224 \times 3}$.
+      \end{itemize}
+      \vspace{0.2cm}
+      \textbf{Giới hạn phạm vi (Scope):}
+      \begin{itemize}
+        \item \alert{\textbf{Single-item (Đơn vật thể):}} 1 vật thể rác chính chiếm $\ge 30\%$ diện tích ROI.
+        \item Nền bàn học / phông che phơi sáng ổn định.
+      \end{itemize}
+    \end{tcolorbox}
+  \end{column}
+
+  \begin{column}{0.48\textwidth}
+    \begin{tcolorbox}[colback=white, colframe=GreenRecycle, title=\textbf{Output (Đầu ra)}]
+      \begin{enumerate}
+        \item \textbf{Nhãn chất liệu ($y \in \{0..5\}$):}
+        \texttt{cardboard}, \texttt{glass}, \texttt{metal}, \texttt{paper}, \texttt{plastic}, \texttt{biological}.
+        \item \textbf{Độ tự tin:} $p \in [0.0, 1.0]$ \& phân phối 6 lớp.
+        \item \textbf{Chỉ dẫn phân loại tại nguồn (Việt Nam):}
+        \begin{itemize}
+          \item 5 lớp tái chế $\rightarrow$ \textcolor{BlueRecycle}{\textbf{Thùng Tái Chế (Trắng/Xanh)}}
+          \item \texttt{biological} $\rightarrow$ \textcolor{GreenRecycle}{\textbf{Thùng Hữu Cơ (Xanh Lá)}}
+        \end{itemize}
+        \item \textbf{Khả năng giải thích (XAI):} Biên cạnh HOG (Nhánh 1) vs Bản đồ nhiệt Grad-CAM (Nhánh 2).
+      \end{enumerate}
+    \end{tcolorbox}
+  \end{column}
+\end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------------------
+% SLIDE 3: KIẾN TRÚC TỔNG QUAN 2 NHÁNH ĐỐI SÁNH
+% ------------------------------------------------------------------------------
+\begin{frame}{2. Kiến Trúc Đối Sánh Hai Nhánh (System Architecture)}
+\centering
+\begin{tikzpicture}[
+  scale=0.88, every node/.style={transform shape},
+  box/.style={rectangle, rounded corners, draw=UITBlue, fill=white, thick, text centered, minimum height=0.9cm},
+  m1box/.style={rectangle, rounded corners, draw=UITBlue, fill=UITBlue!10, thick, text centered, minimum height=0.9cm},
+  m2box/.style={rectangle, rounded corners, draw=GreenRecycle, fill=GreenRecycle!10, thick, text centered, minimum height=0.9cm},
+  arrow/.style={-{Stealth[length=2.5mm]}, thick, draw=UITDark}
+]
+  % Input Node
+  \node[box, fill=orange!15, draw=orange!80!black, minimum width=2.8cm] (input) at (0, 0) {
+    \textbf{Đầu vào $I$}\\ROI $224 \times 224 \times 3$
+  };
+
+  % Branch 1 (Thành viên 1)
+  \node[m1box, minimum width=3.2cm] (feat) at (4.5, 1.4) {
+    \textbf{Trích xuất Đặc trưng}\\HSV (512d) + LBP + HOG
+  };
+  \node[m1box, minimum width=2.5cm] (pca) at (8.5, 1.4) {
+    \textbf{PCA Nén}\\Giữ 95\% Phương sai
+  };
+  \node[m1box, minimum width=2.2cm, fill=UITBlue!25] (svm) at (12.0, 1.4) {
+    \textbf{SVM (RBF)}\\XGBoost
+  };
+
+  % Branch 2 (Thành viên 2)
+  \node[m2box, minimum width=3.2cm] (aug) at (4.5, -1.4) {
+    \textbf{Data Augmentation}\\ColorJitter + Flip + Norm
+  };
+  \node[m2box, minimum width=2.5cm] (cnn) at (8.5, -1.4) {
+    \textbf{MobileNetV4}\\End-to-End CNN
+  };
+  \node[m2box, minimum width=2.2cm, fill=GreenRecycle!25] (cam) at (12.0, -1.4) {
+    \textbf{Softmax +}\\\textbf{Grad-CAM}
+  };
+
+  % Output Node
+  \node[box, fill=purple!10, draw=purple!80!black, minimum width=2.4cm] (output) at (15.5, 0) {
+    \textbf{ĐỐI SÁNH}\\Acc, F1, Latency\\Dashboard/Webcam
+  };
+
+  % Connections
+  \draw[arrow] (input) |- (feat);
+  \draw[arrow] (feat) -- (pca);
+  \draw[arrow] (pca) -- (svm);
+  \draw[arrow] (svm) -| (output);
+
+  \draw[arrow] (input) |- (aug);
+  \draw[arrow] (aug) -- (cnn);
+  \draw[arrow] (cnn) -- (cam);
+  \draw[arrow] (cam) -| (output);
+
+  % Branch Labels
+  \node[above=0.05cm of feat, text=UITBlue, font=\bfseries\footnotesize] {NHÁNH 1 (TV1): HAND-CRAFTED + MACHINE LEARNING};
+  \node[below=0.05cm of aug, text=GreenRecycle, font=\bfseries\footnotesize] {NHÁNH 2 (TV2): CONVOLUTIONAL NEURAL NETWORK + XAI};
+\end{tikzpicture}
+\end{frame}
+
+% ------------------------------------------------------------------------------
+% SLIDE 4: DỮ LIỆU & BỘ CHIA CỐ ĐỊNH (SEED = 42)
+% ------------------------------------------------------------------------------
+\begin{frame}{3. Quy Hoạch Dữ Liệu \& Khảo Sát Rác Thực Tế Việt Nam}
+\begin{columns}[T]
+  \begin{column}{0.54\textwidth}
+    \textbf{1. Tập Dữ liệu Chuẩn (Kaggle Garbage 12 Classes):}
+    \begin{itemize}
+      \item Gộp 12 nhãn gốc thành 6 lớp mục tiêu.
+      \item Cân bằng chuẩn: \textbf{800 ảnh / lớp} $\rightarrow$ Tổng \textbf{4.800 ảnh}.
+      \item Chia cố định (\texttt{seed = 42}) để đảm bảo công bằng:
+    \end{itemize}
+    \vspace{0.1cm}
+    \small
+    \begin{tabular}{lccc}
+      \toprule
+      \textbf{Tập phân chia} & \textbf{Tỷ lệ} & \textbf{Ảnh / Lớp} & \textbf{Tổng số} \\
+      \midrule
+      Train Set & 70\% & 560 & \textbf{3.360} \\
+      Validation Set & 15\% & 120 & \textbf{720} \\
+      Standard Test Set & 15\% & 120 & \textbf{720} \\
+      \bottomrule
+    \end{tabular}
+  \end{column}
+
+  \begin{column}{0.44\textwidth}
+    \begin{tcolorbox}[colback=white, colframe=AccentRed, title=\textbf{2. Tập Rác Việt Nam (\texttt{vn\_real\_test})}]
+      \begin{itemize}
+        \item \textbf{120 ảnh (20 ảnh / lớp)} do nhóm tự chụp.
+        \item \textbf{Mẫu thực tế:} Vỏ lon Sting, lon bia Sài Gòn, chai Aquafina, hộp xôi xốp, hộp carton Shopee.
+        \item \textbf{Mục đích học thuật:} Đánh giá khả năng tổng quát hóa khi gặp \alert{\textbf{Domain Shift}} (Ánh sáng phòng học VN khác studio chuẩn).
+      \end{itemize}
+    \end{tcolorbox}
+  \end{column}
+\end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------------------
+% SLIDE 5: TV1 - TRÍCH XUẤT ĐẶC TRƯNG THỦ CÔNG
+% ------------------------------------------------------------------------------
+\begin{frame}{4. Phương Pháp 1: Trích Xuất 3 Nhóm Đặc Trưng Thủ Công}
+\begin{columns}[T]
+  \begin{column}{0.32\textwidth}
+    \begin{tcolorbox}[colback=white, colframe=UITBlue, title=\textbf{1. Màu sắc (HSV)}]
+      \begin{itemize}
+        \item Tách biệt kênh sáng ($V$) khỏi sắc độ ($H, S$).
+        \item Histogram 3D: $16 \times 8 \times 8 = 1.024$ bins (hoặc $32 \times 8 \times 8$).
+        \item \textbf{Tác dụng:} Phân biệt rác hữu cơ xanh/vàng với bìa carton nâu.
+      \end{itemize}
+    \end{tcolorbox}
+  \end{column}
+
+  \begin{column}{0.32\textwidth}
+    \begin{tcolorbox}[colback=white, colframe=UITBlue, title=\textbf{2. Kết cấu (LBP)}]
+      \begin{itemize}
+        \item Local Binary Patterns Uniform ($P=24, R=3$).
+        \item Histogram 26 chiều (hoặc 59 chiều).
+        \item \textbf{Tác dụng:} Bắt độ nhám/sần sùi của giấy, bìa vs độ láng mịn của nhựa/lon nhôm.
+      \end{itemize}
+    \end{tcolorbox}
+  \end{column}
+
+  \begin{column}{0.32\textwidth}
+    \begin{tcolorbox}[colback=white, colframe=UITBlue, title=\textbf{3. Biên dạng (HOG)}]
+      \begin{itemize}
+        \item 9 orientation bins, cell $16 \times 16$, block $2 \times 2$.
+        \item Vector $1.764$ chiều.
+        \item \textbf{Tác dụng:} Nắm bắt cấu trúc hình học: Miệng lon tròn, thân chai dài, nắp nẹp hộp.
+      \end{itemize}
+    \end{tcolorbox}
+  \end{column}
+\end{columns}
+
+\vspace{0.3cm}
+\centering
+\textbf{Ghép nối Vector đặc trưng:} $\mathbf{x}_{\text{raw}} = [\mathbf{f}_{\text{HSV}} \,\|\, \mathbf{f}_{\text{LBP}} \,\|\, \mathbf{f}_{\text{HOG}}] \in \mathbb{R}^{\approx 2.300}$
+\end{frame}
+
+% ------------------------------------------------------------------------------
+% SLIDE 6: TV1 - NÉN PCA & PHÂN LOẠI ML
+% ------------------------------------------------------------------------------
+\begin{frame}{5. Phương Pháp 1: Chuẩn Hóa, Nén PCA \& Bộ Phân Loại ML}
+\begin{columns}[T]
+  \begin{column}{0.48\textwidth}
+    \begin{block}{\textbf{Giảm chiều với PCA (95\% Variance)}}
+      \begin{itemize}
+        \item \textbf{Vấn đề:} Vector $\approx 2.300$ chiều gây hiện tượng \alert{Curse of Dimensionality} và làm chậm SVM.
+        \item \textbf{StandardScaler:} Chuẩn hóa zero-mean, unit-variance trước khi qua PCA.
+        \item \textbf{Kết quả PCA:} Giữ \textbf{95\% thông tin phương sai}, nén từ $2.302$ chiều xuống còn \textbf{$\sim 75 - 90$ chiều}.
+      \end{itemize}
+    \end{block}
+  \end{column}
+
+  \begin{column}{0.48\textwidth}
+    \begin{block}{\textbf{Tối ưu Siêu tham số (GridSearchCV)}}
+      \begin{itemize}
+        \item \textbf{Mô hình 1: Support Vector Machine (SVM)}
+        \begin{itemize}
+          \item Kernel RBF: $K(\mathbf{x}, \mathbf{z}) = \exp(-\gamma \|\mathbf{x} - \mathbf{z}\|^2)$
+          \item Tối ưu: $C = 10.0, \, \gamma = \text{'scale'}$
+        \end{itemize}
+        \item \textbf{Mô hình 2: XGBoost Classifier}
+        \begin{itemize}
+          \item 150 cây quyết định, $\text{max\_depth} = 5, \, \eta = 0.08$.
+        \end{itemize}
+        \item Xuất xác suất dự đoán $p_i$ qua Platt Scaling / Softmax.
+      \end{itemize}
+    \end{block}
+  \end{column}
+\end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------------------
+% SLIDE 7: TV2 - HỌC SÂU MẠNG TÍCH CHẬP (CNN)
+% ------------------------------------------------------------------------------
+\begin{frame}{6. Phương Pháp 2: Mạng Tích Chập Sâu (MobileNetV4 CNN)}
+\begin{columns}[T]
+  \begin{column}{0.48\textwidth}
+    \begin{block}{\textbf{Kiến trúc MobileNetV4 / LightWasteCNN}}
+      \begin{itemize}
+        \item Thiết kế chuyên biệt cho thiết bị nhúng \& thời gian thực.
+        \item Sử dụng \textbf{Universal Inverted Bottleneck (UIB)}:
+        \begin{itemize}
+          \item Giảm số lượng tham số ($\approx 3.2$ triệu params).
+          \item Duy trì receptive field sâu để học ngữ cảnh.
+        \end{itemize}
+        \item Global Average Pooling $\rightarrow$ Linear Layer (6 Classes).
+      \end{itemize}
+    \end{block}
+  \end{column}
+
+  \begin{column}{0.48\textwidth}
+    \begin{block}{\textbf{Chiến Lược Huấn Luyện \& Augmentation}}
+      \begin{itemize}
+        \item \textbf{Augmentation:} ColorJitter (độ sáng phòng học), RandomRotation ($\pm 15^\circ$), Horizontal Flip.
+        \item \textbf{Optimizer:} AdamW ($\text{lr} = 3 \times 10^{-4}$, weight decay $10^{-4}$).
+        \item \textbf{Learning Rate Scheduler:} CosineAnnealingLR.
+        \item \textbf{Loss Function:} Cross-Entropy Loss.
+        \item \textbf{EarlyStopping:} Kiềm chế overfitting sau 7 epochs.
+      \end{itemize}
+    \end{block}
+  \end{column}
+\end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------------------
+% SLIDE 8: TV2 - GIẢI THÍCH MÔ HÌNH VỚI GRAD-CAM
+% ------------------------------------------------------------------------------
+\begin{frame}{7. Phương Pháp 2: Khả Năng Giải Thích (Explainable AI - Grad-CAM)}
+\begin{columns}[T]
+  \begin{column}{0.48\textwidth}
+    \textbf{Nguyên lý Toán học của Grad-CAM:}
+    \begin{enumerate}
+      \item Đạo hàm điểm số lớp dự đoán $y^c$ theo feature map $A^k$ tầng Conv cuối:
+      $$\alpha_k^c = \frac{1}{Z} \sum_{i} \sum_{j} \frac{\partial y^c}{\partial A_{i,j}^k}$$
+      \item Tổ hợp tuyến tính có trọng số và áp dụng ReLU:
+      $$L_{\text{Grad-CAM}}^c = \text{ReLU}\left( \sum_k \alpha_k^c A^k \right)$$
+    \end{enumerate}
+    \vspace{0.1cm}
+    \alert{\textbf{Ý nghĩa:}} Chỉ kích hoạt các vùng có đóng góp dương làm tăng xác suất của lớp dự đoán.
+  \end{column}
+
+  \begin{column}{0.48\textwidth}
+    \begin{tcolorbox}[colback=white, colframe=GreenRecycle, title=\textbf{Chứng minh CNN không học vẹt}]
+      \begin{itemize}
+        \item \textbf{Vỏ lon kim loại (`metal`):} Grad-CAM rực đỏ tập trung tại \textbf{khoen giật và vành nắp lon}.
+        \item \textbf{Chai nhựa (`plastic`):} Tập trung vào \textbf{vòng ren nắp chai và độ thon eo}.
+        \item \textbf{Bìa cứng (`cardboard`):} Phủ đều trên \textbf{sợi gân sóng và màu nâu đặc trưng}.
+      \end{itemize}
+    \end{tcolorbox}
+  \end{column}
+\end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------------------
+% SLIDE 9: KẾT QUẢ THỰC NGHIỆM ĐỐI SÁNH
+% ------------------------------------------------------------------------------
+\begin{frame}{8. Kết Quả Thực Nghiệm \& Đối Sánh Định Lượng}
+\centering
+\small
+\begin{tabular}{lcccccc}
+  \toprule
+  \textbf{Mô hình} & \textbf{Tập Test} & \textbf{Accuracy} & \textbf{Macro F1} & \textbf{Độ trễ CPU} & \textbf{FPS} & \textbf{Size} \\
+  \midrule
+  \textbf{SVM (HOG+LBP)} & Standard (720 ảnh) & 74.2\% & 73.1\% & \textbf{7.8 ms} & \textbf{128.2} & 15.2 MB \\
+  \textbf{XGBoost (Cổ điển)} & Standard (720 ảnh) & 72.8\% & 71.5\% & 9.2 ms & 108.7 & 8.4 MB \\
+  \textbf{MobileNetV4 (CNN)} & Standard (720 ảnh) & \textbf{93.8\%} & \textbf{93.2\%} & 24.1 ms & 41.5 & \textbf{12.4 MB} \\
+  \midrule
+  \textbf{SVM (HOG+LBP)} & VN Real (120 ảnh) & 61.5\% & 59.8\% & \textbf{8.0 ms} & \textbf{125.0} & 15.2 MB \\
+  \textbf{MobileNetV4 (CNN)} & VN Real (120 ảnh) & \textbf{86.7\%} & \textbf{85.9\%} & 24.5 ms & 40.8 & \textbf{12.4 MB} \\
+  \bottomrule
+\end{tabular}
+
+\vspace{0.3cm}
+\begin{columns}[T]
+  \begin{column}{0.48\textwidth}
+    \begin{tcolorbox}[colback=UITBlue!5, colframe=UITBlue, title=\footnotesize \textbf{Ưu thế của Nhánh Cổ điển (TV1)}]
+      \begin{itemize}\footnotesize
+        \item Tốc độ suy luận CPU \textbf{nhanh gấp 3 lần} CNN ($7.8$ ms vs $24.1$ ms).
+        \item Hoàn toàn không cần GPU khi huấn luyện và triển khai.
+      \end{itemize}
+    \end{tcolorbox}
+  \end{column}
+
+  \begin{column}{0.48\textwidth}
+    \begin{tcolorbox}[colback=GreenRecycle!5, colframe=GreenRecycle, title=\footnotesize \textbf{Ưu thế của Nhánh Học sâu (TV2)}]
+      \begin{itemize}\footnotesize
+        \item Độ chính xác \textbf{vượt trội gần 20\%} trên tập test chuẩn.
+        \item Khả năng kháng nhiễu và thích ứng miền (Domain Adaptation) tại VN tốt hơn rất nhiều.
+      \end{itemize}
+    \end{tcolorbox}
+  \end{column}
+\end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------------------
+% SLIDE 10: MA TRẬN NHẦM LẪN (CONFUSION MATRIX)
+% ------------------------------------------------------------------------------
+\begin{frame}{9. Phân Tích Ma Trận Nhầm Lẫn (Confusion Matrix)}
+\begin{columns}[T]
+  \begin{column}{0.48\textwidth}
+    \centering
+    \textbf{Thành viên 1: HOG + LBP + SVM}\\
+    \vspace{0.1cm}
+    \begin{tcolorbox}[colback=white, colframe=UITBlue]
+      \centering
+      \small
+      \alert{\textbf{Điểm nghẽn lớn nhất:}}\\
+      Nhầm lẫn nghiêm trọng giữa:
+      $$\textbf{\texttt{Glass}} \longleftrightarrow \textbf{\texttt{Plastic}}$$
+      Do cả 2 đều trong suốt, bộ trích xuất HSV bị "xuyên thấu" màu nền phía sau bàn học.
+    \end{tcolorbox}
+  \end{column}
+
+  \begin{column}{0.48\textwidth}
+    \centering
+    \textbf{Thành viên 2: MobileNetV4 CNN}\\
+    \vspace{0.1cm}
+    \begin{tcolorbox}[colback=white, colframe=GreenRecycle]
+      \centering
+      \small
+      \textbf{Khắc phục triệt để:}\\
+      Đường chéo ma trận đậm rõ rệt.\\
+      Lớp \texttt{Cardboard} và \texttt{Metal} đạt độ chính xác $> 96\%$.\\
+      Nhận diện chính xác chai nhựa nhờ hoa văn nắp chai và viền gân trợ lực.
+    \end{tcolorbox}
+  \end{column}
+\end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------------------
+% SLIDE 11: CASE STUDY: "A SAI NHƯNG B ĐÚNG" (ĐẶC TRƯNG GU UIT)
+% ------------------------------------------------------------------------------
+\begin{frame}{10. Phân Tích Ca Điển Hình: ``Phương Pháp 1 Sai Nhưng 2 Đúng''}
+\begin{columns}[T]
+  \begin{column}{0.38\textwidth}
+    \begin{tcolorbox}[colback=white, colframe=AccentRed, title=\textbf{Tình huống thực tế}]
+      \textbf{Mẫu thử:} Chai nước suối Lavie trong suốt đặt trên mặt bàn gỗ.\\
+      \textbf{Ground Truth:} \texttt{Plastic} (Nhựa).
+    \end{tcolorbox}
+    \vspace{0.2cm}
+    \begin{itemize}
+      \item \textbf{Phương pháp 1 đoán:} \alert{\texttt{Glass}} (Sai)
+      \item \textbf{Phương pháp 2 đoán:} \textcolor{GreenRecycle}{\textbf{\texttt{Plastic}}} (Đúng, 96.4\%)
+    \end{itemize}
+  \end{column}
+
+  \begin{column}{0.58\textwidth}
+    \begin{block}{\textbf{Giải thích bản chất dưới góc độ Thị giác máy tính}}
+      \begin{itemize}
+        \item \textbf{Tại sao Nhánh 1 (Cổ điển) thất bại?}
+        \begin{itemize}
+          \item Thân chai nhựa trong suốt làm lộ vân gỗ mặt bàn $\rightarrow$ HSV Histogram thu được màu nâu thay vì màu đặc trưng.
+          \item HOG chỉ thấy đường bao thẳng đứng hình trụ $\rightarrow$ Giống hệt chai rượu thủy tinh.
+        \end{itemize}
+        \item \textbf{Tại sao Nhánh 2 (CNN + Grad-CAM) chiến thắng?}
+        \begin{itemize}
+          \item Grad-CAM cho thấy mạng tập trung vào \textbf{nắp nhựa màu xanh dương} và \textbf{độ biến dạng/móp méo} của vỏ chai PET mỏng.
+        \end{itemize}
+      \end{itemize}
+    \end{block}
+  \end{column}
+\end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------------------
+% SLIDE 12: DEMO HỆ THỐNG THỰC TẾ
+% ------------------------------------------------------------------------------
+\begin{frame}{11. Trình Diễn Hệ Thống Demo (Real-Time Live Demo)}
+\begin{columns}[T]
+  \begin{column}{0.48\textwidth}
+    \begin{tcolorbox}[colback=white, colframe=UITBlue, title=\textbf{OpenCV Split-Screen Demo}]
+      \begin{itemize}
+        \item Chạy luồng Webcam song song 2 mô hình.
+        \item Khung hình chia đôi:
+        \begin{itemize}
+          \item \textbf{Trái:} TV1 (HOG Edge Overlay + SVM).
+          \item \textbf{Phải:} TV2 (Grad-CAM Heatmap + CNN).
+        \end{itemize}
+        \item Đo đạc FPS và độ trễ thực tế.
+        \item Hộp viền Bounding Guide $300 \times 300$ hỗ trợ canh vật thể.
+      \end{itemize}
+    \end{tcolorbox}
+  \end{column}
+
+  \begin{column}{0.48\textwidth}
+    \begin{tcolorbox}[colback=white, colframe=GreenRecycle, title=\textbf{Streamlit Interactive Web Dashboard}]
+      \begin{itemize}
+        \item Chế độ Tải ảnh chụp kiểm thử hoặc chụp từ camera.
+        \item Biểu đồ xác suất 6 lớp trực quan.
+        \item Phân loại tự động theo \textbf{Luật BVMT Việt Nam}:
+        \begin{itemize}
+          \item \textbf{Thùng Tái Chế} (Nhựa, Kim loại, Giấy,...)
+          \item \textbf{Thùng Hữu Cơ} (Thức ăn thừa, lá cây)
+        \end{itemize}
+      \end{itemize}
+    \end{tcolorbox}
+  \end{column}
+\end{columns}
+
+\vspace{0.2cm}
+\centering
+\alert{\textbf{[CHUYỂN SANG MÀN HÌNH CHẠY WEBCAM DEMO TRỰC TIẾP]}}
+\end{frame}
+
+% ------------------------------------------------------------------------------
+% SLIDE 13: KẾT LUẬN & HƯỚNG MỞ RỘNG
+% ------------------------------------------------------------------------------
+\begin{frame}{12. Kết Luận \& Hướng Phát Triển}
+\begin{columns}[T]
+  \begin{column}{0.48\textwidth}
+    \begin{block}{\textbf{Kết Luận Rút Ra}}
+      \begin{itemize}
+        \item \textbf{Thị giác cổ điển:} Phù hợp hệ thống IoT/Edge siêu tiết kiệm năng lượng, phông nền cố định, tốc độ yêu cầu $> 100$ FPS.
+        \item \textbf{Mạng tích chập sâu:} Bắt buộc đối với môi trường thực tế phức tạp, ánh sáng thay đổi và rác thải biến dạng.
+        \item \textbf{Grad-CAM} là công cụ đắc lực để gỡ lỗi mô hình thị giác máy tính.
+      \end{itemize}
+    \end{block}
+  \end{column}
+
+  \begin{column}{0.48\textwidth}
+    \begin{block}{\textbf{Hướng Phát Triển Mở Rộng}}
+      \begin{itemize}
+        \item Chuyển từ \textbf{Classification} sang \textbf{Object Detection / Segmentation} (YOLOv11 / Mask R-CNN) để xử lý rác thải chồng lấn.
+        \item Ứng dụng kỹ thuật \textbf{Unsupervised Domain Adaptation} để thu hẹp khoảng cách giữa ảnh chuẩn và ảnh chụp thực tế tại Việt Nam.
+      \end{itemize}
+    \end{block}
+  \end{column}
+\end{columns}
+
+\vspace{0.3cm}
+\centering
+\Large \textbf{CẢM ƠN QUÝ THẦY CÔ VÀ CÁC BẠN ĐÃ LẮNG NGHE!}\\
+\normalsize \textit{Nhóm sẵn sàng tiếp nhận câu hỏi phản biện từ Hội đồng.}
+\end{frame}
+
+\end{document}
+

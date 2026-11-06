@@ -1,0 +1,44 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Large Datasets (Do not commit image files to git)
+data/standard_split/
+data/raw/
+data/*.zip
+data/*.tar.gz
+data/vn_real_test/*/*.jpg
+data/vn_real_test/*/*.png
+data/vn_real_test/*/*.jpeg
+!data/vn_real_test/*/.gitkeep
+!data/vn_real_test/README.md
+
+# Model Checkpoints (Store only lightweight final production weights)
+weights/*.pt
+weights/*.pth
+weights/*.bin
+!weights/classical_svm_pipeline.pkl
+!weights/mobilenetv4_best.pth
+!weights/.gitkeep
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Evaluation Outputs
+results/
+runs/
+*.csv
+*.png
+

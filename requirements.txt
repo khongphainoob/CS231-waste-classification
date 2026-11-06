@@ -1,0 +1,29 @@
+# Waste Classification CV - CS231 Project Dependencies
+# Note: Keep numpy < 2.0 to ensure ABI compatibility with scikit-learn, OpenCV, and PyTorch
+numpy>=1.24.0,<2.0.0
+
+# Computer Vision & Image Processing
+opencv-python>=4.8.0
+scikit-image>=0.22.0
+pillow>=10.0.0
+albumentations>=1.4.0
+
+# Classical Machine Learning
+scikit-learn>=1.3.0
+xgboost>=2.0.0
+joblib>=1.3.0
+
+# Deep Learning
+torch>=2.1.0
+torchvision>=0.16.0
+timm>=0.9.12
+grad-cam>=1.5.0
+
+# Visualization & App
+matplotlib>=3.8.0
+seaborn>=0.13.0
+streamlit>=1.32.0
+pyyaml>=6.0.1
+tqdm>=4.66.0
+pandas>=2.1.0
+

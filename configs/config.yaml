@@ -1,0 +1,84 @@
+# ==============================================================================
+# CS231 - Waste Classification Project Configuration
+# Single-item Municipal Solid Waste Classification: Classical CV vs Deep Learning
+# ==============================================================================
+
+project:
+  name: "waste-classification-cv"
+  version: "1.0.0"
+  random_seed: 42
+
+dataset:
+  img_size: 224
+  num_classes: 6
+  classes:
+    0: "cardboard"
+    1: "glass"
+    2: "metal"
+    3: "paper"
+    4: "plastic"
+    5: "biological"
+  
+  # Vietnamese waste bin segregation guidelines
+  bin_mapping:
+    cardboard: "Thùng Tái Chế (Trắng / Xanh Dương)"
+    glass: "Thùng Tái Chế (Trắng / Xanh Dương)"
+    metal: "Thùng Tái Chế (Trắng / Xanh Dương)"
+    paper: "Thùng Tái Chế (Trắng / Xanh Dương)"
+    plastic: "Thùng Tái Chế (Trắng / Xanh Dương)"
+    biological: "Thùng Hữu Cơ (Xanh Lá)"
+
+  paths:
+    train_dir: "data/standard_split/train"
+    val_dir: "data/standard_split/val"
+    test_dir: "data/standard_split/test"
+    vn_test_dir: "data/vn_real_test"
+    results_dir: "results"
+
+webcam:
+  camera_index: 0
+  frame_width: 640
+  frame_height: 480
+  roi_size: 300
+  target_fps: 30
+
+# Member 1: Classical CV + Machine Learning Configuration
+classical:
+  color:
+    h_bins: 32
+    s_bins: 8
+    v_bins: 8
+  lbp:
+    points: 24
+    radius: 3
+    method: "uniform"
+  hog:
+    orientations: 9
+    pixels_per_cell: [16, 16]
+    cells_per_block: [2, 2]
+  pca:
+    use_pca: true
+    variance_ratio: 0.95
+  model_type: "svm"  # "svm" or "xgboost"
+  svm:
+    C: 10.0
+    gamma: "scale"
+    kernel: "rbf"
+    probability: true
+  weight_path: "weights/classical_svm_pipeline.pkl"
+
+# Member 2: Deep Learning CNN Configuration
+deep_learning:
+  model_name: "mobilenetv4_conv_small"  # alternative: "resnet18", "efficientnet_b0"
+  pretrained: true
+  batch_size: 32
+  num_workers: 2
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  epochs: 40
+  early_stopping_patience: 7
+  normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+  weight_path: "weights/mobilenetv4_best.pth"
+
