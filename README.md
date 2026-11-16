@@ -69,7 +69,7 @@ waste-classification-cv/
 │
 ├── data/
 │   ├── download_and_split.py       # Tự động map 12 lớp Kaggle về 6 lớp, chia 70/15/15 seed=42
-│   ├── standard_split/             # Chứa train/ (3,360), val/ (720), test/ (720)
+│   ├── standard_split/             # Chứa train/ (3,360), val/ (720), test/ (689, lớp metal chỉ đủ 89 ảnh)
 │   └── vn_real_test/               # 120 ảnh rác thực tế tại Việt Nam (20 ảnh / lớp)
 │
 ├── notebooks/                      # Sổ tay thí nghiệm trên Google Colab / Kaggle
@@ -80,25 +80,29 @@ waste-classification-cv/
 ├── src/
 │   ├── __init__.py
 │   ├── base_predictor.py           # Interface chuẩn: predict(image_rgb_224) -> dict
+│   ├── utils.py                    # Tiện ích chung: resolve_path, load_config, read_image_rgb (Unicode-safe)
 │   │
 │   ├── member1_classical/          # === KHU VỰC THÀNH VIÊN 1 (Thị giác cổ điển) ===
-│   │   ├── feature_extractor.py    # Trích xuất HSV (512d) + LBP + HOG + Visualizer
-│   │   ├── train_ml.py             # StandardScaler + PCA + SVM / XGBoost
-│   │   └── predictor_ml.py         # ClassicalPredictor kế thừa BasePredictor
+│   │   ├── feature_extractor.py    # Trích HSV (512) + LBP (26) + HOG (1764) = 2302 chiều
+│   │   ├── train_ml.py             # StandardScaler + PCA 95% + SVM (chọn C, gamma trên val) / XGBoost
+│   │   ├── predictor_ml.py         # ClassicalPredictor kế thừa BasePredictor
+│   │   ├── ablation.py             # Thí nghiệm bỏ bớt từng nhóm đặc trưng
+│   │   ├── visualize_pipeline.py   # Vẽ từng bước xử lý trên 1 ảnh (slide / demo)
+│   │   └── HUONG_DAN_NGUOI_1.md    # Quy trình + câu hỏi vấn đáp của TV1
 │   │
 │   ├── member2_deeplearning/       # === KHU VỰC THÀNH VIÊN 2 (Học sâu CNN) ===
 │   │   ├── dataset_aug.py          # PyTorch Dataset + ImageNet Standardization
-│   │   ├── train_cnn.py            # Huấn luyện MobileNetV4 / LightWasteCNN
+│   │   ├── train_cnn.py            # Huấn luyện MobileNet / ResNet / LightWasteCNN + EarlyStopping
 │   │   ├── gradcam_viz.py          # Tính toán Grad-CAM và phủ màu Jet
 │   │   └── predictor_dl.py         # DeepLearningPredictor kế thừa BasePredictor
 │   │
 │   └── evaluation/                 # === MODULE ĐÁNH GIÁ ĐỐI SÁNH DÙNG CHUNG ===
-│       └── benchmark.py            # Chạy cả 2 model trên tập test -> CSV & Confusion Matrix
+│       └── benchmark.py            # Chạy cả 2 model -> CSV, Confusion Matrix & Ca TV1 sai / TV2 đúng
 │
 ├── weights/                        # Lưu trọng số sau huấn luyện
-│   ├── generate_mock_weights.py    # Script tạo mock weights để test demo tức thì
-│   ├── classical_svm_pipeline.pkl  # Pipeline Scaler + PCA + SVM (~15 MB)
-│   └── mobilenetv4_best.pth        # Checkpoint PyTorch CNN (~12 MB)
+│   ├── classical_svm_pipeline.pkl  # Pipeline Scaler + PCA + SVM (~23.9 MB)
+│   ├── classical_xgboost_pipeline.pkl # Pipeline XGBoost (~10.3 MB)
+│   └── mobilenetv4_best.pth        # Checkpoint PyTorch CNN (TV2)
 │
 └── app/                            # ỨNG DỤNG TRÌNH DIỄN BẢO VỆ
     ├── webcam_split_demo.py        # OpenCV chia đôi màn hình siêu mượt (60 FPS)
@@ -165,17 +169,17 @@ streamlit run app/streamlit_dashboard.py
 
 ---
 
-## 📊 5. Bảng Kết quả Thực nghiệm & Đối sánh Dự kiến
+## 📊 5. Bảng Kết quả Thực nghiệm & Đối sánh
 
-| Chỉ số Đánh giá | TV1: Classical ML (HOG+LBP+SVM) | TV2: Deep Learning (MobileNetV4 CNN) | Nhận xét Khoa học |
+| Chỉ số Đánh giá | TV1: Classical ML (HSV+LBP+HOG+SVM) — số đo thật | TV2: Deep Learning (CNN) | Nhận xét Khoa học |
 | :--- | :---: | :---: | :--- |
-| **Accuracy (Standard Test)** | ~74.2% | **~93.8%** | CNN vượt trội nhờ khả năng tự học biểu diễn phân cấp mức cao. |
-| **Macro F1-Score** | ~73.1% | **~93.2%** | CNN duy trì độ cân bằng tốt trên cả 6 lớp. |
-| **Accuracy (VN Real Test 120 ảnh)** | ~61.5% | **~86.7%** | Domain Shift làm suy giảm độ chính xác cổ điển do nhạy cảm với phông nền phòng học. |
-| **Độ trễ suy luận (CPU Intel/AMD)** | **~7.5 - 9.5 ms** | ~22.0 - 28.0 ms | Phương pháp cổ điển nhẹ hơn và nhanh gấp 3 lần trên CPU yếu. |
-| **Tốc độ khung hình (FPS)** | **> 100 FPS** | ~35 - 45 FPS | Cả hai đều đáp ứng thời gian thực (Real-time $\ge 30$ FPS). |
-| **Kích thước file trọng số** | ~15.2 MB | **~12.4 MB** | MobileNetV4 tối ưu tham số rất tốt (~3.2 triệu tham số). |
-| **Tính giải thích được (XAI)** | Bản đồ biên cạnh HOG | Bản đồ nhiệt Grad-CAM | Grad-CAM cho thấy trực quan CNN chú ý vào nắp chai, miệng lon, vết nhăn giấy. |
+| **Accuracy (Standard Test, 689 ảnh)** | 76.5% | *chờ train TV2* | Chạy `benchmark.py` sau khi TV2 train xong để chốt số đo thật. |
+| **Macro F1-Score** | 76.1% | *chờ train TV2* | |
+| **Accuracy (VN Real Test 120 ảnh)** | *chờ chụp ảnh* | *chờ chụp ảnh* | Chụp 120 ảnh thực tế VN vào `data/vn_real_test/`. |
+| **Độ trễ suy luận (CPU)** | ~31.5 ms (LBP chiếm ~22 ms) | *chờ đo lại* | Đo trên cùng máy trong `benchmark.py`. |
+| **Tốc độ khung hình (FPS)** | ~32 FPS | *chờ đo lại* | |
+| **Kích thước file trọng số** | 23.9 MB (SVM giữ ~3,103 support vector) | *chờ train TV2* | |
+| **Tính giải thích được (XAI)** | Bản đồ biên cạnh HOG | Bản đồ nhiệt Grad-CAM | Grad-CAM chỉ ra vùng ảnh quyết định nhãn của CNN. |
 
 ---
 

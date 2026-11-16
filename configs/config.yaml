@@ -44,27 +44,28 @@ webcam:
 
 # Member 1: Classical CV + Machine Learning Configuration
 classical:
-  color:
-    h_bins: 32
+  color:            # Histogram HSV 3D: 8 x 8 x 8 = 512 chiều
+    h_bins: 8
     s_bins: 8
     v_bins: 8
-  lbp:
+  lbp:              # LBP uniform: P + 2 = 26 chiều
     points: 24
     radius: 3
-    method: "uniform"
-  hog:
+  hog:              # Ảnh xám 128x128, ô 16x16, block 2x2, 9 hướng -> 7*7*36 = 1764 chiều
+    resize: 128
     orientations: 9
-    pixels_per_cell: [16, 16]
-    cells_per_block: [2, 2]
+    pixels_per_cell: 16
+    cells_per_block: 2
   pca:
-    use_pca: true
     variance_ratio: 0.95
-  model_type: "svm"  # "svm" or "xgboost"
-  svm:
-    C: 10.0
-    gamma: "scale"
-    kernel: "rbf"
-    probability: true
+  model_type: "svm"  # "svm" hoặc "xgboost"
+  svm:              # Các giá trị thử khi chọn siêu tham số trên tập validation
+    C_list: [1, 3, 10, 30]
+    gamma_list: ["scale", 0.0005, 0.002]
+  xgboost:
+    n_estimators: 300
+    max_depth: 5
+    learning_rate: 0.1
   weight_path: "weights/classical_svm_pipeline.pkl"
 
 # Member 2: Deep Learning CNN Configuration

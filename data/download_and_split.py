@@ -17,15 +17,20 @@ Functions:
   5. Initializes data/vn_real_test structure for Vietnam real-world photos.
 """
 
-import os
-import sys
-import shutil
-import random
-import glob
 import argparse
-from typing import Dict, List
-import numpy as np
+import glob
+import os
+import random
+import shutil
+import sys
+
 import cv2
+import numpy as np
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+from src.utils import resolve_path, set_seed, write_image
 
 # Target Classes
 TARGET_CLASSES = [
@@ -50,12 +55,14 @@ CLASS_MAPPING = {
 
 def create_directories(base_dir: str = "data/standard_split"):
     """Creates directory layout for train, val, and test splits."""
+    base_abs = resolve_path(base_dir)
+    vn_abs = resolve_path("data/vn_real_test")
     for split in ["train", "val", "test"]:
         for cls in TARGET_CLASSES:
-            os.makedirs(os.path.join(base_dir, split, cls), exist_ok=True)
+            os.makedirs(os.path.join(base_abs, split, cls), exist_ok=True)
 
     for cls in TARGET_CLASSES:
-        os.makedirs(os.path.join("data/vn_real_test", cls), exist_ok=True)
+        os.makedirs(os.path.join(vn_abs, cls), exist_ok=True)
 
     print("[+] Verified target dataset directory tree.")
 
@@ -67,21 +74,22 @@ def process_and_split(
     samples_per_class: int = 800
 ):
     """Processes source images, aggregates classes, and splits deterministically."""
-    random.seed(seed)
-    np.random.seed(seed)
-    create_directories(target_base)
+    set_seed(seed)
+    raw_abs = resolve_path(raw_dir)
+    target_abs = resolve_path(target_base)
+    create_directories(target_abs)
 
     train_count = 560
     val_count = 120
     test_count = 120
 
-    print(f"\n[*] Processing and partitioning data from: {raw_dir}")
+    print(f"\n[*] Processing and partitioning data from: {raw_abs}")
     print(f"[*] Target split per class: Train={train_count}, Val={val_count}, Test={test_count} (Total={samples_per_class})")
 
     for target_cls, src_subdirs in CLASS_MAPPING.items():
         all_candidate_files = []
         for src_sub in src_subdirs:
-            folder = os.path.join(raw_dir, src_sub)
+            folder = os.path.join(raw_abs, src_sub)
             if os.path.isdir(folder):
                 for ext in ("*.jpg", "*.jpeg", "*.png", "*.JPG", "*.PNG"):
                     all_candidate_files.extend(glob.glob(os.path.join(folder, ext)))
@@ -90,6 +98,8 @@ def process_and_split(
             print(f"[!] Warning: No images found for class '{target_cls}' in subfolders {src_subdirs}.")
             continue
 
+        # Sắp xếp trước khi xáo để máy nào chạy (Windows / Colab) cũng ra cùng 1 cách chia
+        all_candidate_files = sorted(set(os.path.normpath(p) for p in all_candidate_files))
         random.shuffle(all_candidate_files)
         selected_files = all_candidate_files[:samples_per_class]
 
@@ -99,7 +109,7 @@ def process_and_split(
 
         # Copy to destinations
         for split_name, file_list in [("train", train_files), ("val", val_files), ("test", test_files)]:
-            dest_dir = os.path.join(target_base, split_name, target_cls)
+            dest_dir = os.path.join(target_abs, split_name, target_cls)
             for idx, src_file in enumerate(file_list):
                 ext = os.path.splitext(src_file)[1]
                 dest_filename = f"{target_cls}_{idx:04d}{ext}"
@@ -114,7 +124,9 @@ def process_and_split(
 def generate_synthetic_data(target_base: str = "data/standard_split", per_class: int = 30):
     """Generates synthetic colored pattern images for offline local pipeline smoke tests."""
     print(f"\n[*] Generating synthetic test data ({per_class} per class)...")
-    create_directories(target_base)
+    target_abs = resolve_path(target_base)
+    vn_abs = resolve_path("data/vn_real_test")
+    create_directories(target_abs)
 
     color_schemes = {
         "cardboard": (160, 130, 90),   # Brownish
@@ -131,25 +143,24 @@ def generate_synthetic_data(target_base: str = "data/standard_split", per_class:
 
     for cls, base_color in color_schemes.items():
         for split, count in [("train", n_train), ("val", n_val), ("test", n_test)]:
-            dest_dir = os.path.join(target_base, split, cls)
+            dest_dir = os.path.join(target_abs, split, cls)
             for i in range(count):
                 img = np.zeros((224, 224, 3), dtype=np.uint8)
                 noise = np.random.randint(-20, 20, (224, 224, 3))
                 c_val = np.clip(np.array(base_color) + noise, 0, 255).astype(np.uint8)
                 img[:] = c_val
-                # Add shape signature
                 cv2.circle(img, (112, 112), 40 + (i % 10), (0, 0, 0), 2)
-                cv2.imwrite(os.path.join(dest_dir, f"synth_{cls}_{i:03d}.jpg"), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+                write_image(os.path.join(dest_dir, f"synth_{cls}_{i:03d}.jpg"), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
 
     # Also generate samples in vn_real_test
     for cls, base_color in color_schemes.items():
-        dest_dir = os.path.join("data/vn_real_test", cls)
+        dest_dir = os.path.join(vn_abs, cls)
         for i in range(10):
             img = np.zeros((224, 224, 3), dtype=np.uint8)
             noise = np.random.randint(-15, 15, (224, 224, 3))
             img[:] = np.clip(np.array(base_color) + noise, 0, 255).astype(np.uint8)
             cv2.putText(img, f"VN-{cls[:3]}", (50, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
-            cv2.imwrite(os.path.join(dest_dir, f"vn_{cls}_{i:03d}.jpg"), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+            write_image(os.path.join(dest_dir, f"vn_{cls}_{i:03d}.jpg"), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
 
     print("[+] Synthetic dataset generated successfully for instant pipeline testing!")
 
@@ -165,10 +176,11 @@ if __name__ == "__main__":
     if args.synthetic:
         generate_synthetic_data()
     else:
-        if os.path.isdir(args.raw_dir):
-            process_and_split(args.raw_dir, samples_per_class=args.samples_per_class, seed=args.seed)
+        raw_abs = resolve_path(args.raw_dir)
+        if os.path.isdir(raw_abs):
+            process_and_split(raw_abs, samples_per_class=args.samples_per_class, seed=args.seed)
         else:
-            print(f"[!] Directory not found: {args.raw_dir}")
+            print(f"[!] Directory not found: {raw_abs}")
             print("    Run with '--synthetic' to create local dummy images for instant verification, or")
             print("    download Kaggle dataset first:")
             print("    kaggle datasets download -d mostafaabla/garbage-classification -p data/raw/ --unzip")
