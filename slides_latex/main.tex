@@ -141,41 +141,41 @@
 \begin{frame}{2. Kiến Trúc Đối Sánh Hai Nhánh (System Architecture)}
 \centering
 \begin{tikzpicture}[
-  scale=0.88, every node/.style={transform shape},
-  box/.style={rectangle, rounded corners, draw=UITBlue, fill=white, thick, text centered, minimum height=0.9cm},
-  m1box/.style={rectangle, rounded corners, draw=UITBlue, fill=UITBlue!10, thick, text centered, minimum height=0.9cm},
-  m2box/.style={rectangle, rounded corners, draw=GreenRecycle, fill=GreenRecycle!10, thick, text centered, minimum height=0.9cm},
+  scale=0.80, every node/.style={transform shape},
+  box/.style={rectangle, rounded corners, draw=UITBlue, fill=white, thick, align=center, minimum height=0.95cm, font=\small},
+  m1box/.style={rectangle, rounded corners, draw=UITBlue, fill=UITBlue!10, thick, align=center, minimum height=0.95cm, font=\small},
+  m2box/.style={rectangle, rounded corners, draw=GreenRecycle, fill=GreenRecycle!10, thick, align=center, minimum height=0.95cm, font=\small},
   arrow/.style={-{Stealth[length=2.5mm]}, thick, draw=UITDark}
 ]
   % Input Node
-  \node[box, fill=orange!15, draw=orange!80!black, minimum width=2.8cm] (input) at (0, 0) {
+  \node[box, fill=orange!15, draw=orange!80!black, minimum width=2.5cm] (input) at (0, 0) {
     \textbf{Đầu vào $I$}\\ROI $224 \times 224 \times 3$
   };
 
   % Branch 1 (Thành viên 1)
-  \node[m1box, minimum width=3.2cm] (feat) at (4.5, 1.4) {
-    \textbf{Trích xuất Đặc trưng}\\HSV (512d) + LBP + HOG
+  \node[m1box, minimum width=3.1cm] (feat) at (4.1, 1.45) {
+    \textbf{Trích xuất Đặc trưng}\\HSV (512) + LBP + HOG
   };
-  \node[m1box, minimum width=2.5cm] (pca) at (8.5, 1.4) {
-    \textbf{PCA Nén}\\Giữ 95\% Phương sai
+  \node[m1box, minimum width=2.5cm] (pca) at (7.8, 1.45) {
+    \textbf{PCA Nén}\\$2.302 \rightarrow 693$ chiều
   };
-  \node[m1box, minimum width=2.2cm, fill=UITBlue!25] (svm) at (12.0, 1.4) {
+  \node[m1box, minimum width=2.2cm, fill=UITBlue!25] (svm) at (10.9, 1.45) {
     \textbf{SVM (RBF)}\\XGBoost
   };
 
   % Branch 2 (Thành viên 2)
-  \node[m2box, minimum width=3.2cm] (aug) at (4.5, -1.4) {
+  \node[m2box, minimum width=3.1cm] (aug) at (4.1, -1.45) {
     \textbf{Data Augmentation}\\ColorJitter + Flip + Norm
   };
-  \node[m2box, minimum width=2.5cm] (cnn) at (8.5, -1.4) {
-    \textbf{MobileNetV4}\\End-to-End CNN
+  \node[m2box, minimum width=2.5cm] (cnn) at (7.8, -1.45) {
+    \textbf{CNN Backbone}\\MobileNet / ResNet
   };
-  \node[m2box, minimum width=2.2cm, fill=GreenRecycle!25] (cam) at (12.0, -1.4) {
+  \node[m2box, minimum width=2.2cm, fill=GreenRecycle!25] (cam) at (10.9, -1.45) {
     \textbf{Softmax +}\\\textbf{Grad-CAM}
   };
 
   % Output Node
-  \node[box, fill=purple!10, draw=purple!80!black, minimum width=2.4cm] (output) at (15.5, 0) {
+  \node[box, fill=purple!10, draw=purple!80!black, minimum width=2.4cm] (output) at (14.1, 0) {
     \textbf{ĐỐI SÁNH}\\Acc, F1, Latency\\Dashboard/Webcam
   };
 
@@ -191,8 +191,8 @@
   \draw[arrow] (cam) -| (output);
 
   % Branch Labels
-  \node[above=0.05cm of feat, text=UITBlue, font=\bfseries\footnotesize] {NHÁNH 1 (TV1): HAND-CRAFTED + MACHINE LEARNING};
-  \node[below=0.05cm of aug, text=GreenRecycle, font=\bfseries\footnotesize] {NHÁNH 2 (TV2): CONVOLUTIONAL NEURAL NETWORK + XAI};
+  \node[above=0.1cm of pca, text=UITBlue, font=\bfseries\footnotesize] {NHÁNH 1 (TV1): HAND-CRAFTED + MACHINE LEARNING};
+  \node[below=0.1cm of cnn, text=GreenRecycle, font=\bfseries\footnotesize] {NHÁNH 2 (TV2): CONVOLUTIONAL NEURAL NETWORK + XAI};
 \end{tikzpicture}
 \end{frame}
 
@@ -216,7 +216,7 @@
       \midrule
       Train Set & 70\% & 560 & \textbf{3.360} \\
       Validation Set & 15\% & 120 & \textbf{720} \\
-      Standard Test Set & 15\% & 120 & \textbf{720} \\
+      Standard Test Set & 15\% & 120 (metal: 89) & \textbf{689} \\
       \bottomrule
     \end{tabular}
   \end{column}
@@ -242,7 +242,7 @@
     \begin{tcolorbox}[colback=white, colframe=UITBlue, title=\textbf{1. Màu sắc (HSV)}]
       \begin{itemize}
         \item Tách biệt kênh sáng ($V$) khỏi sắc độ ($H, S$).
-        \item Histogram 3D: $16 \times 8 \times 8 = 1.024$ bins (hoặc $32 \times 8 \times 8$).
+        \item Histogram 3D: $8 \times 8 \times 8 = 512$ bins, chia tổng $\Rightarrow$ tỉ lệ pixel.
         \item \textbf{Tác dụng:} Phân biệt rác hữu cơ xanh/vàng với bìa carton nâu.
       \end{itemize}
     \end{tcolorbox}
@@ -252,7 +252,7 @@
     \begin{tcolorbox}[colback=white, colframe=UITBlue, title=\textbf{2. Kết cấu (LBP)}]
       \begin{itemize}
         \item Local Binary Patterns Uniform ($P=24, R=3$).
-        \item Histogram 26 chiều (hoặc 59 chiều).
+        \item Histogram $P+2 = 26$ chiều (25 mẫu uniform + 1 non-uniform).
         \item \textbf{Tác dụng:} Bắt độ nhám/sần sùi của giấy, bìa vs độ láng mịn của nhựa/lon nhôm.
       \end{itemize}
     \end{tcolorbox}
@@ -261,17 +261,17 @@
   \begin{column}{0.32\textwidth}
     \begin{tcolorbox}[colback=white, colframe=UITBlue, title=\textbf{3. Biên dạng (HOG)}]
       \begin{itemize}
-        \item 9 orientation bins, cell $16 \times 16$, block $2 \times 2$.
-        \item Vector $1.764$ chiều.
+        \item Ảnh xám $128 \times 128$, 9 hướng, ô $16 \times 16$, block $2 \times 2$.
+        \item $7 \times 7$ block $\times$ 36 $= 1.764$ chiều.
         \item \textbf{Tác dụng:} Nắm bắt cấu trúc hình học: Miệng lon tròn, thân chai dài, nắp nẹp hộp.
       \end{itemize}
     \end{tcolorbox}
   \end{column}
 \end{columns}
 
-\vspace{0.3cm}
+\vspace{0.1cm}
 \centering
-\textbf{Ghép nối Vector đặc trưng:} $\mathbf{x}_{\text{raw}} = [\mathbf{f}_{\text{HSV}} \,\|\, \mathbf{f}_{\text{LBP}} \,\|\, \mathbf{f}_{\text{HOG}}] \in \mathbb{R}^{\approx 2.300}$
+\small\textbf{Ghép nối:} $\mathbf{x} = [\mathbf{f}_{\text{HSV}} \,\|\, \mathbf{f}_{\text{LBP}} \,\|\, \mathbf{f}_{\text{HOG}}] \in \mathbb{R}^{2.302}$ \quad ($512 + 26 + 1.764$)
 \end{frame}
 
 % ------------------------------------------------------------------------------
@@ -282,24 +282,25 @@
   \begin{column}{0.48\textwidth}
     \begin{block}{\textbf{Giảm chiều với PCA (95\% Variance)}}
       \begin{itemize}
-        \item \textbf{Vấn đề:} Vector $\approx 2.300$ chiều gây hiện tượng \alert{Curse of Dimensionality} và làm chậm SVM.
+        \item \textbf{Vấn đề:} Vector $2.302$ chiều gây hiện tượng \alert{Curse of Dimensionality} và làm chậm SVM.
         \item \textbf{StandardScaler:} Chuẩn hóa zero-mean, unit-variance trước khi qua PCA.
-        \item \textbf{Kết quả PCA:} Giữ \textbf{95\% thông tin phương sai}, nén từ $2.302$ chiều xuống còn \textbf{$\sim 75 - 90$ chiều}.
+        \item \textbf{Kết quả PCA:} Giữ \textbf{95\% thông tin phương sai}, nén từ $2.302$ chiều xuống còn \textbf{693 chiều}.
       \end{itemize}
     \end{block}
   \end{column}
 
   \begin{column}{0.48\textwidth}
-    \begin{block}{\textbf{Tối ưu Siêu tham số (GridSearchCV)}}
+    \begin{block}{\textbf{Chọn siêu tham số trên tập Validation}}
       \begin{itemize}
         \item \textbf{Mô hình 1: Support Vector Machine (SVM)}
         \begin{itemize}
           \item Kernel RBF: $K(\mathbf{x}, \mathbf{z}) = \exp(-\gamma \|\mathbf{x} - \mathbf{z}\|^2)$
-          \item Tối ưu: $C = 10.0, \, \gamma = \text{'scale'}$
+          \item Thử $C \in \{1,3,10,30\}$, $\gamma \in \{\text{scale}, 5\text{e-}4, 2\text{e-}3\}$
+          \item Tốt nhất: $C = 3, \, \gamma = 5\text{e-}4$ (val 72.6\%)
         \end{itemize}
         \item \textbf{Mô hình 2: XGBoost Classifier}
         \begin{itemize}
-          \item 150 cây quyết định, $\text{max\_depth} = 5, \, \eta = 0.08$.
+          \item 300 cây, $\text{max\_depth} = 5, \, \eta = 0.1$ (để so sánh).
         \end{itemize}
         \item Xuất xác suất dự đoán $p_i$ qua Platt Scaling / Softmax.
       \end{itemize}
@@ -380,12 +381,12 @@
   \toprule
   \textbf{Mô hình} & \textbf{Tập Test} & \textbf{Accuracy} & \textbf{Macro F1} & \textbf{Độ trễ CPU} & \textbf{FPS} & \textbf{Size} \\
   \midrule
-  \textbf{SVM (HOG+LBP)} & Standard (720 ảnh) & 74.2\% & 73.1\% & \textbf{7.8 ms} & \textbf{128.2} & 15.2 MB \\
-  \textbf{XGBoost (Cổ điển)} & Standard (720 ảnh) & 72.8\% & 71.5\% & 9.2 ms & 108.7 & 8.4 MB \\
-  \textbf{MobileNetV4 (CNN)} & Standard (720 ảnh) & \textbf{93.8\%} & \textbf{93.2\%} & 24.1 ms & 41.5 & \textbf{12.4 MB} \\
+  \textbf{SVM (HSV+LBP+HOG)} & Standard (689 ảnh) & 76.5\% & 76.1\% & 31.5 ms & 32 & 23.9 MB \\
+  \textbf{XGBoost (Cổ điển)} & Standard (689 ảnh) & 66.8\% & 66.0\% & 56.8 ms & 18 & 10.3 MB \\
+  \textbf{CNN (TV2)} & Standard (689 ảnh) & \alert{chờ TV2} & \alert{chờ TV2} & \alert{chờ TV2} & \alert{chờ TV2} & \alert{chờ TV2} \\
   \midrule
-  \textbf{SVM (HOG+LBP)} & VN Real (120 ảnh) & 61.5\% & 59.8\% & \textbf{8.0 ms} & \textbf{125.0} & 15.2 MB \\
-  \textbf{MobileNetV4 (CNN)} & VN Real (120 ảnh) & \textbf{86.7\%} & \textbf{85.9\%} & 24.5 ms & 40.8 & \textbf{12.4 MB} \\
+  \textbf{SVM (HSV+LBP+HOG)} & VN Real (120 ảnh) & \alert{chờ chụp} & \alert{chờ chụp} & 31.5 ms & 32 & 23.9 MB \\
+  \textbf{CNN (TV2)} & VN Real (120 ảnh) & \alert{chờ TV2} & \alert{chờ TV2} & \alert{chờ TV2} & \alert{chờ TV2} & \alert{chờ TV2} \\
   \bottomrule
 \end{tabular}
 
@@ -394,8 +395,8 @@
   \begin{column}{0.48\textwidth}
     \begin{tcolorbox}[colback=UITBlue!5, colframe=UITBlue, title=\footnotesize \textbf{Ưu thế của Nhánh Cổ điển (TV1)}]
       \begin{itemize}\footnotesize
-        \item Tốc độ suy luận CPU \textbf{nhanh gấp 3 lần} CNN ($7.8$ ms vs $24.1$ ms).
-        \item Hoàn toàn không cần GPU khi huấn luyện và triển khai.
+        \item Train hoàn toàn trên CPU trong $\sim$3 phút, không cần GPU.
+        \item Giải thích được từng đặc trưng (ablation: HSV + HOG đóng góp chính).
       \end{itemize}
     \end{tcolorbox}
   \end{column}
@@ -418,15 +419,16 @@
 \begin{columns}[T]
   \begin{column}{0.48\textwidth}
     \centering
-    \textbf{Thành viên 1: HOG + LBP + SVM}\\
+    \textbf{Thành viên 1: HSV + LBP + HOG + SVM}\\
     \vspace{0.1cm}
     \begin{tcolorbox}[colback=white, colframe=UITBlue]
       \centering
       \small
-      \alert{\textbf{Điểm nghẽn lớn nhất:}}\\
-      Nhầm lẫn nghiêm trọng giữa:
-      $$\textbf{\texttt{Glass}} \longleftrightarrow \textbf{\texttt{Plastic}}$$
-      Do cả 2 đều trong suốt, bộ trích xuất HSV bị "xuyên thấu" màu nền phía sau bàn học.
+      \alert{\textbf{Các cặp nhầm nhiều nhất (test):}}\\
+      \texttt{Plastic} $\rightarrow$ \texttt{Glass}: 17 ảnh\\
+      \texttt{Metal} $\rightarrow$ \texttt{Plastic}: 12 ảnh\\
+      \texttt{Glass} $\rightarrow$ \texttt{Biological}: 11 ảnh\\
+      Vật trong suốt / bóng phản chiếu lấy màu của nền nên HSV bị ``đánh lừa''; chai xanh trên nền cỏ bị đoán là rác hữu cơ.
     \end{tcolorbox}
   \end{column}
 

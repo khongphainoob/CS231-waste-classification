@@ -1,6 +1,5 @@
-"""Member 1: Classical Computer Vision and Machine Learning Module."""
+"""Thành viên 1: Thị giác cổ điển (HSV + LBP + HOG) + SVM."""
 from .feature_extractor import WasteFeatureExtractor
 from .predictor_ml import ClassicalPredictor
 
 __all__ = ["WasteFeatureExtractor", "ClassicalPredictor"]
-
