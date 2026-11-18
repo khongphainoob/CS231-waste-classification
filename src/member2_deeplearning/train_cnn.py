@@ -1,326 +1,212 @@
-"""Deep Learning Training Script (Member 2).
+"""Train 6-class CNN, ResNet18 or MobileNetV4 without synthetic/architecture fallback.
 
-Fine-tunes a CNN (timm MobileNetV4, torchvision MobileNetV3/ResNet18/EfficientNet,
-or native LightWasteCNN) for 6-class waste classification with early stopping,
-learning curves, and test evaluation.
+Run from project root:
+python -m src.member2_deeplearning.train_cnn --model resnet18 --epochs 20 --freeze_epochs 3
 """
-
 import argparse
 import csv
+import json
 import os
 import sys
+import random
+from pathlib import Path
 import time
-from typing import Dict, List, Optional, Tuple
-
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torch.nn as nn
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
+from torch import nn
 from torch.utils.data import DataLoader
+import yaml
+from sklearn.metrics import f1_score
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 from src.base_predictor import CLASS_NAMES
+from src.member2_deeplearning.audit_data import audit_dataset
 from src.member2_deeplearning.dataset_aug import WasteDataset, get_transforms
-from src.utils import load_config, resolve_path, set_seed
-
-OUT_DIR = os.path.join(ROOT, "results", "member2")
-
-
-class LightWasteCNN(nn.Module):
-    """Self-contained lightweight ConvNet when external backbones are unavailable."""
-
-    def __init__(self, num_classes: int = 6):
-        super().__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(256, 384, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(384),
-            nn.ReLU(inplace=True),
-        )
-        self.pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.classifier = nn.Sequential(nn.Dropout(p=0.3), nn.Linear(384, num_classes))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.features(x)
-        x = self.pool(x)
-        x = torch.flatten(x, 1)
-        return self.classifier(x)
+from src.member2_deeplearning.model_factory import (
+    LightWasteCNN, SUPPORTED_MODELS, build_model, set_backbone_trainable,
+)
 
 
-def _build_torchvision_model(model_name: str, num_classes: int, pretrained: bool) -> Optional[nn.Module]:
-    """Builds supported torchvision backbones with replaced classifier head."""
+def seed_everything(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
     try:
-        from torchvision import models
-    except ImportError:
-        return None
-
-    weights_flag = "DEFAULT" if pretrained else None
-    if model_name == "mobilenet_v3_small":
-        model = models.mobilenet_v3_small(weights=weights_flag)
-        model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, num_classes)
-        return model
-    if model_name == "mobilenet_v3_large":
-        model = models.mobilenet_v3_large(weights=weights_flag)
-        model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, num_classes)
-        return model
-    if model_name == "resnet18":
-        model = models.resnet18(weights=weights_flag)
-        model.fc = nn.Linear(model.fc.in_features, num_classes)
-        return model
-    if model_name == "efficientnet_b0":
-        model = models.efficientnet_b0(weights=weights_flag)
-        model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, num_classes)
-        return model
-    return None
+        torch.use_deterministic_algorithms(True, warn_only=True)
+    except TypeError:
+        pass
 
 
-def build_model(model_name: str = "mobilenet_v3_small", num_classes: int = 6, pretrained: bool = True) -> nn.Module:
-    """Builds CNN backbone via torchvision, timm, or native LightWasteCNN fallback."""
-    if model_name == "light_cnn":
-        return LightWasteCNN(num_classes=num_classes)
-
-    tv_model = _build_torchvision_model(model_name, num_classes, pretrained)
-    if tv_model is not None:
-        return tv_model
-
-    try:
-        import timm
-        return timm.create_model(model_name, pretrained=pretrained, num_classes=num_classes)
-    except Exception as e:
-        print(f"[!] Cannot load '{model_name}' ({e}). Falling back to LightWasteCNN.")
-        return LightWasteCNN(num_classes=num_classes)
+def worker_seed(worker_id):
+    worker_seed_value = torch.initial_seed() % (2 ** 32)
+    np.random.seed(worker_seed_value)
+    random.seed(worker_seed_value)
 
 
-def evaluate_loader(
-    model: nn.Module, loader: DataLoader, criterion: nn.Module, device: torch.device
-) -> Tuple[float, float, List[int], List[int]]:
-    """Evaluates model on a DataLoader and returns (avg_loss, accuracy, y_true, y_pred)."""
-    model.eval()
-    total_loss, total = 0.0, 0
-    y_true: List[int] = []
-    y_pred: List[int] = []
-
-    with torch.no_grad():
-        for inputs, targets in loader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
-            total_loss += loss.item() * inputs.size(0)
-            preds = torch.argmax(outputs, dim=1)
-            y_true.extend(targets.cpu().tolist())
-            y_pred.extend(preds.cpu().tolist())
-            total += targets.size(0)
-
-    avg_loss = total_loss / total if total > 0 else 0.0
-    acc = accuracy_score(y_true, y_pred) if y_true else 0.0
-    return avg_loss, float(acc), y_true, y_pred
-
-
-def save_training_curves(history: List[Dict[str, float]], out_dir: str) -> None:
-    """Saves history.csv and Loss/Accuracy curve plot."""
-    os.makedirs(out_dir, exist_ok=True)
-    csv_path = os.path.join(out_dir, "history.csv")
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["epoch", "train_loss", "train_acc", "val_loss", "val_acc"])
-        writer.writeheader()
-        writer.writerows(history)
-
-    epochs = [row["epoch"] for row in history]
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4))
-    ax1.plot(epochs, [r["train_loss"] for r in history], label="Train Loss")
-    ax1.plot(epochs, [r["val_loss"] for r in history], label="Val Loss")
-    ax1.set_title("Loss per Epoch")
-    ax1.set_xlabel("Epoch")
-    ax1.legend()
-    ax1.grid(alpha=0.3)
-
-    ax2.plot(epochs, [r["train_acc"] * 100 for r in history], label="Train Acc")
-    ax2.plot(epochs, [r["val_acc"] * 100 for r in history], label="Val Acc")
-    ax2.set_title("Accuracy (%) per Epoch")
-    ax2.set_xlabel("Epoch")
-    ax2.legend()
-    ax2.grid(alpha=0.3)
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, "learning_curves.png"), dpi=150)
-    plt.close(fig)
+def one_epoch(model, loader, criterion, device, optimizer=None):
+    is_training = optimizer is not None
+    model.train(is_training)
+    # During classifier-only warm-up, frozen BatchNorm statistics must not drift.
+    if is_training and not any(p.requires_grad for n, p in model.named_parameters()
+                               if not ("fc." in n or "classifier." in n or "head." in n)):
+        for module in model.modules():
+            if isinstance(module, nn.modules.batchnorm._BatchNorm):
+                module.eval()
+    total_loss, n_total, n_correct = 0., 0, 0
+    true_labels, predictions = [], []
+    with torch.set_grad_enabled(is_training):
+        for images, targets in loader:
+            images = images.to(device, non_blocking=True)
+            targets = targets.to(device, non_blocking=True)
+            if is_training:
+                optimizer.zero_grad(set_to_none=True)
+            logits = model(images)
+            loss = criterion(logits, targets)
+            if is_training:
+                loss.backward()
+                optimizer.step()
+            pred = logits.argmax(1)
+            bs = targets.shape[0]
+            total_loss += float(loss.item()) * bs
+            n_total += bs
+            n_correct += int((pred == targets).sum().item())
+            true_labels.extend(targets.cpu().tolist())
+            predictions.extend(pred.detach().cpu().tolist())
+    if not n_total:
+        raise ValueError("Empty training/validation dataloader")
+    return {"loss": total_loss / n_total,
+            "accuracy": n_correct / n_total,
+            "macro_f1": float(f1_score(true_labels, predictions,
+                                       labels=list(range(len(CLASS_NAMES))),
+                                       average="macro", zero_division=0))}
 
 
-def train_cnn_model(
-    config_path: str = "configs/config.yaml",
-    model_name: Optional[str] = None,
-    epochs: Optional[int] = None,
-    batch_size: Optional[int] = None,
-    lr: Optional[float] = None,
-):
-    """Executes the PyTorch training, early stopping, and test evaluation workflow."""
-    cfg = load_config(config_path)
-    seed = cfg.get("project", {}).get("random_seed", 42)
-    set_seed(seed)
+def _weight_name(model_name):
+    return "mobilenetv4_best.pth" if model_name == "mobilenetv4_conv_small" else f"{model_name}_best.pth"
 
+
+def train_cnn_model(config_path="configs/config.yaml", model_name=None, epochs=None,
+                    batch_size=None, lr=None, freeze_epochs=0, patience=None,
+                    workers=None, data_root=None, output_root=".", pretrained=None,
+                    allow_synthetic=False, seed=None):
+    cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) if Path(config_path).exists() else {}
+    cfg = cfg or {}
     dl_cfg = cfg.get("deep_learning", {})
-    model_name = model_name or dl_cfg.get("model_name", "mobilenet_v3_small")
-    epochs = epochs if epochs is not None else dl_cfg.get("epochs", 30)
-    batch_size = batch_size if batch_size is not None else dl_cfg.get("batch_size", 32)
-    lr = lr if lr is not None else dl_cfg.get("learning_rate", 0.0003)
-    weight_decay = dl_cfg.get("weight_decay", 0.0001)
-    patience = dl_cfg.get("early_stopping_patience", 7)
-    weight_path = resolve_path(dl_cfg.get("weight_path", "weights/mobilenetv4_best.pth"))
-
-    paths_cfg = cfg.get("dataset", {}).get("paths", {})
-    train_dir = resolve_path(paths_cfg.get("train_dir", "data/standard_split/train"))
-    val_dir = resolve_path(paths_cfg.get("val_dir", "data/standard_split/val"))
-    test_dir = resolve_path(paths_cfg.get("test_dir", "data/standard_split/test"))
-
+    model_name = model_name or dl_cfg.get("model_name", "resnet18")
+    if model_name not in SUPPORTED_MODELS:
+        raise ValueError(f"Supported: {SUPPORTED_MODELS}")
+    pretrained = (model_name != "light_cnn" and dl_cfg.get("pretrained", True)) if pretrained is None else pretrained
+    epochs = int(epochs if epochs is not None else dl_cfg.get("epochs", 30))
+    batch_size = int(batch_size if batch_size is not None else dl_cfg.get("batch_size", 32))
+    lr = float(lr if lr is not None else dl_cfg.get("learning_rate", .0003))
+    patience = int(patience if patience is not None else dl_cfg.get("early_stopping_patience", 7))
+    workers = int(workers if workers is not None else dl_cfg.get("num_workers", 0))
+    seed = int(seed if seed is not None else cfg.get("project", {}).get("random_seed", 42))
+    if epochs < 1 or batch_size < 1 or freeze_epochs < 0 or freeze_epochs >= epochs:
+        raise ValueError("Require epochs>=1, batch_size>=1, 0<=freeze_epochs<epochs")
+    if model_name == "light_cnn" and (pretrained or freeze_epochs):
+        raise ValueError("light_cnn must train from scratch without freeze_epochs")
+    root = Path(data_root or "data/standard_split")
+    output_root = Path(output_root)
+    audit = audit_dataset(root, allow_synthetic=allow_synthetic)
+    seed_everything(seed)
+    train_ds = WasteDataset(str(root / "train"), CLASS_NAMES, get_transforms(True))
+    val_ds = WasteDataset(str(root / "val"), CLASS_NAMES, get_transforms(False))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[*] Device: {device} | Seed: {seed}")
-
-    train_dataset = WasteDataset(train_dir, CLASS_NAMES, transform=get_transforms(is_train=True))
-    val_dataset = WasteDataset(val_dir, CLASS_NAMES, transform=get_transforms(is_train=False))
-    test_dataset = WasteDataset(test_dir, CLASS_NAMES, transform=get_transforms(is_train=False))
-
-    if len(train_dataset) == 0:
-        print(f"[!] Error: No training data found at {train_dir}.")
-        return
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
-
-    model = build_model(model_name=model_name, num_classes=len(CLASS_NAMES), pretrained=True).to(device)
-    effective_name = "light_cnn" if isinstance(model, LightWasteCNN) else model_name
+    print(f"[DL] model={model_name} device={device} train={len(train_ds)} val={len(val_ds)} "
+          f"seed={seed} pretrained={pretrained}")
+    g = torch.Generator().manual_seed(seed)
+    common = {"batch_size": batch_size, "num_workers": workers,
+              "pin_memory": device.type == "cuda", "worker_init_fn": worker_seed,
+              "generator": g}
+    train_loader = DataLoader(train_ds, shuffle=True, **common)
+    val_loader = DataLoader(val_ds, shuffle=False, **common)
+    model = build_model(model_name, len(CLASS_NAMES), pretrained=pretrained).to(device)
+    if freeze_epochs:
+        set_backbone_trainable(model, model_name, False)
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr,
+                                  weight_decay=float(dl_cfg.get("weight_decay", 1e-4)))
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
-
-    os.makedirs(os.path.dirname(weight_path), exist_ok=True)
-    os.makedirs(OUT_DIR, exist_ok=True)
-
-    best_val_acc = 0.0
-    no_improve_epochs = 0
-    history: List[Dict[str, float]] = []
-
-    print(f"\n=== MEMBER 2: TRAINING {effective_name} ({model.__class__.__name__}) ===")
+    ckpt_path = output_root / "weights" / _weight_name(model_name)
+    out_dir = output_root / "results" / "dl" / model_name
+    ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "dataset_audit.json").write_text(json.dumps(audit, indent=2), encoding="utf-8")
+    rows = []
+    best_f1, best_loss, best_epoch, stale = -1., float("inf"), 0, 0
     for epoch in range(1, epochs + 1):
-        model.train()
-        train_loss, train_correct, train_total = 0.0, 0, 0
-        t0 = time.time()
-
-        for inputs, targets in train_loader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
-            loss.backward()
-            optimizer.step()
-
-            train_loss += loss.item() * inputs.size(0)
-            train_correct += (torch.argmax(outputs, dim=1) == targets).sum().item()
-            train_total += targets.size(0)
-
+        if freeze_epochs and epoch == freeze_epochs + 1:
+            set_backbone_trainable(model, model_name, True)
+            print("[DL] Unfrozen all backbone parameters")
+        t0 = time.perf_counter()
+        tr = one_epoch(model, train_loader, criterion, device, optimizer)
+        va = one_epoch(model, val_loader, criterion, device)
         scheduler.step()
-        tr_loss = train_loss / train_total if train_total > 0 else 0.0
-        tr_acc = train_correct / train_total if train_total > 0 else 0.0
-        val_loss, val_acc, _, _ = evaluate_loader(model, val_loader, criterion, device)
-
-        history.append({
-            "epoch": epoch,
-            "train_loss": round(tr_loss, 4),
-            "train_acc": round(tr_acc, 4),
-            "val_loss": round(val_loss, 4),
-            "val_acc": round(val_acc, 4),
-        })
-        print(
-            f"Epoch [{epoch:02d}/{epochs:02d}] ({time.time() - t0:.1f}s) | "
-            f"Train Loss: {tr_loss:.4f} Acc: {tr_acc * 100:.1f}% | "
-            f"Val Loss: {val_loss:.4f} Acc: {val_acc * 100:.1f}%"
-        )
-
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            no_improve_epochs = 0
-            torch.save(
-                {
-                    "epoch": epoch,
-                    "model_name": effective_name,
-                    "model_class": model.__class__.__name__,
-                    "model_state_dict": model.state_dict(),
-                    "val_acc": best_val_acc,
-                    "class_names": CLASS_NAMES,
-                },
-                weight_path,
-            )
-            print(f"  >>> Saved best checkpoint (Val Acc: {best_val_acc * 100:.1f}%)")
+        row = {"epoch": epoch, "stage": "frozen" if epoch <= freeze_epochs else "finetune",
+               "train_loss": tr["loss"], "train_accuracy": tr["accuracy"],
+               "train_macro_f1": tr["macro_f1"],
+               "val_loss": va["loss"], "val_accuracy": va["accuracy"],
+               "val_macro_f1": va["macro_f1"], "learning_rate": optimizer.param_groups[0]["lr"],
+               "seconds": round(time.perf_counter() - t0, 2)}
+        rows.append(row)
+        print(f"Epoch {epoch:02d}/{epochs}: train={tr['accuracy']:.3f} "
+              f"val_acc={va['accuracy']:.3f} val_F1={va['macro_f1']:.3f} "
+              f"val_loss={va['loss']:.4f} time={row['seconds']}s")
+        improved = (va["macro_f1"] > best_f1 + 1e-7 or
+                    (abs(va["macro_f1"] - best_f1) <= 1e-7 and va["loss"] < best_loss - 1e-7))
+        if improved:
+            best_f1, best_loss, best_epoch, stale = va["macro_f1"], va["loss"], epoch, 0
+            torch.save({"checkpoint_kind": "trained", "model_name": model_name,
+                        "model_state_dict": model.state_dict(), "epoch": epoch,
+                        "class_names": list(CLASS_NAMES), "img_size": 224,
+                        "val_accuracy": va["accuracy"], "val_macro_f1": va["macro_f1"],
+                        "seed": seed, "dataset_manifest_sha256": audit["manifest_sha256"],
+                        "pretrained_initialization": bool(pretrained)}, ckpt_path)
         else:
-            no_improve_epochs += 1
-            if patience and no_improve_epochs >= patience:
-                print(f"[*] Early stopping triggered after {patience} epochs without improvement.")
+            stale += 1
+            if stale >= patience:
+                print(f"[DL] Early stopping at epoch {epoch}")
                 break
-
-    save_training_curves(history, OUT_DIR)
-
-    # Final single-pass evaluation on Test Set using best checkpoint
-    if len(test_dataset) > 0 and os.path.exists(weight_path):
-        ckpt = torch.load(weight_path, map_location=device, weights_only=False)
-        model.load_state_dict(ckpt["model_state_dict"])
-        _, test_acc, y_true, y_pred = evaluate_loader(model, test_loader, criterion, device)
-        test_f1 = f1_score(y_true, y_pred, average="macro")
-        report = classification_report(y_true, y_pred, target_names=CLASS_NAMES, digits=3)
-        print(f"\n[Test] Accuracy: {test_acc * 100:.1f}% | Macro F1: {test_f1 * 100:.1f}%")
-        print(report)
-
-        with open(os.path.join(OUT_DIR, "report_dl.txt"), "w", encoding="utf-8") as f:
-            f.write(f"Model: {effective_name} ({model.__class__.__name__})\n")
-            f.write(f"Val accuracy : {best_val_acc * 100:.2f}%\n")
-            f.write(f"Test accuracy: {test_acc * 100:.2f}%\n")
-            f.write(f"Test macro F1: {test_f1 * 100:.2f}%\n\n")
-            f.write(report)
-
-        cm = confusion_matrix(y_true, y_pred)
-        fig = plt.figure(figsize=(7, 6))
-        plt.imshow(cm, cmap="Blues")
-        plt.title(f"Confusion Matrix - {effective_name} (test)")
-        plt.colorbar()
-        plt.xticks(range(len(CLASS_NAMES)), CLASS_NAMES, rotation=45)
-        plt.yticks(range(len(CLASS_NAMES)), CLASS_NAMES)
-        for i in range(cm.shape[0]):
-            for j in range(cm.shape[1]):
-                plt.text(j, i, cm[i, j], ha="center", va="center",
-                         color="white" if cm[i, j] > cm.max() / 2 else "black")
-        plt.tight_layout()
-        plt.savefig(os.path.join(OUT_DIR, "confusion_matrix_dl.png"), dpi=150)
-        plt.close(fig)
+    with (out_dir / "history.csv").open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    result = {"model_name": model_name, "checkpoint": str(ckpt_path),
+              "best_epoch": best_epoch, "best_val_macro_f1": best_f1,
+              "best_val_loss": best_loss, "epochs_completed": len(rows),
+              "seed": seed, "pretrained_initialization": bool(pretrained),
+              "data_audit": audit, "device": str(device)}
+    (out_dir / "summary.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    print(f"[DL] Checkpoint: {ckpt_path} | best val macro F1 = {best_f1:.4f}")
+    return result
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/config.yaml")
-    parser.add_argument("--model", default=None, help="mobilenetv4_conv_small, mobilenet_v3_small, resnet18, light_cnn")
+    parser.add_argument("--model", choices=SUPPORTED_MODELS, default=None)
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--batch_size", type=int, default=None)
     parser.add_argument("--lr", type=float, default=None)
+    parser.add_argument("--freeze_epochs", type=int, default=0)
+    parser.add_argument("--patience", type=int, default=None)
+    parser.add_argument("--workers", type=int, default=None)
+    parser.add_argument("--data", default=None)
+    parser.add_argument("--output_root", default=".")
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--allow_synthetic", action="store_true", help="DEBUG ONLY")
+    parser.add_argument("--no_pretrained", action="store_true")
     args = parser.parse_args()
-
-    train_cnn_model(
-        config_path=args.config,
-        model_name=args.model,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        lr=args.lr,
-    )
+    train_cnn_model(config_path=args.config, model_name=args.model, epochs=args.epochs,
+                    batch_size=args.batch_size, lr=args.lr, freeze_epochs=args.freeze_epochs,
+                    patience=args.patience, workers=args.workers, data_root=args.data,
+                    output_root=args.output_root,
+                    pretrained=False if args.no_pretrained else None,
+                    allow_synthetic=args.allow_synthetic, seed=args.seed)

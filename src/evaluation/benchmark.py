@@ -30,6 +30,8 @@ if ROOT not in sys.path:
 from src.base_predictor import CLASS_NAMES
 from src.member1_classical.predictor_ml import ClassicalPredictor
 from src.member2_deeplearning.predictor_dl import DeepLearningPredictor
+from src.member2_deeplearning.audit_data import audit_dataset
+from time import perf_counter
 from src.utils import list_class_images, read_image_rgb, resolve_path
 
 
@@ -111,7 +113,16 @@ def evaluate_model(
         if rgb is None:
             continue
         rgb_224 = cv2.resize(rgb, (224, 224), interpolation=cv2.INTER_AREA)
-        result = predictor.predict(rgb_224)
+        if isinstance(predictor, DeepLearningPredictor):
+            result = predictor.predict(rgb_224, with_explanation=False)
+        else:
+            start = perf_counter()
+            features = predictor.extractor.extract(rgb_224)
+            probs = predictor.pipeline.predict_proba(features.reshape(1, -1))[0]
+            labels = predictor.pipeline.classes_
+            result = {"class_id": int(labels[np.argmax(probs)]),
+                      "confidence": float(np.max(probs)),
+                      "latency_ms": (perf_counter() - start) * 1000}
 
         valid_paths.append(img_path)
         y_true.append(gt)
@@ -211,6 +222,9 @@ def run_full_benchmark(
     output_dir: str = "results",
     svm_weights: str = "weights/classical_svm_pipeline.pkl",
     dl_weights: str = "weights/mobilenetv4_best.pth",
+    dl_only: bool = False,
+    allow_synthetic: bool = False,
+    dl_device: str = "cpu",
 ):
     """Executes full comparative benchmark between Member 1 and Member 2."""
     out_abs = resolve_path(output_dir)
@@ -223,10 +237,15 @@ def run_full_benchmark(
     print("CS231 BENCHMARK: CLASSICAL ML vs DEEP LEARNING COMPARISON")
     print("=" * 70)
 
-    p_ml: Optional[ClassicalPredictor] = ClassicalPredictor(svm_abs) if os.path.exists(svm_abs) else None
+    from pathlib import Path
+    split_root = Path(resolve_path(test_dir)).parent
+    if (split_root / "train").is_dir() and (split_root / "val").is_dir():
+        audit_dataset(split_root, allow_synthetic=allow_synthetic)
+    p_ml: Optional[ClassicalPredictor] = None if dl_only else ClassicalPredictor(svm_abs)
     if p_ml is None:
         print(f"[!] Classical weights not found at {svm_abs}. Skipping TV1.")
-    p_dl = DeepLearningPredictor(weight_path=dl_abs, fallback_mode=True)
+    p_dl = DeepLearningPredictor(weight_path=dl_abs, fallback_mode=False,
+                                 device=None if dl_device == "auto" else dl_device)
 
     ml_size_mb = _file_size_mb(svm_abs)
     dl_size_mb = _file_size_mb(dl_abs)
@@ -244,6 +263,14 @@ def run_full_benchmark(
         if not data:
             print(f"[!] Warning: No images found in '{set_path}' ({set_name}). Skipping.")
             continue
+
+        if not allow_synthetic and any(Path(path).name.startswith(("synth_", "vn_")) for path, _ in data):
+            raise ValueError("Synthetic/debug images require --allow_synthetic")
+        warmup = cv2.resize(read_image_rgb(data[0][0]), (224, 224))
+        for _ in range(3):
+            p_dl.predict(warmup, with_explanation=False)
+            if p_ml is not None:
+                p_ml.pipeline.predict_proba(p_ml.extractor.extract(warmup).reshape(1, -1))
 
         slug = set_name.lower().replace(" ", "_")
         print(f"\n>>> BENCHMARKING ON: {set_name.upper()} ({len(data)} items)")
@@ -345,6 +372,7 @@ def run_full_benchmark(
         print(f"\n[+] Saved summary CSV to: {csv_path}")
     else:
         print("[!] No evaluation images found.")
+    p_dl.close()
 
 
 if __name__ == "__main__":
@@ -352,6 +380,14 @@ if __name__ == "__main__":
     parser.add_argument("--test_dir", default="data/standard_split/test")
     parser.add_argument("--vn_dir", default="data/vn_real_test")
     parser.add_argument("--out", default="results")
+    parser.add_argument("--dl_weights", default="weights/mobilenetv4_best.pth")
+    parser.add_argument("--ml_weights", "--svm_weights", default="weights/classical_svm_pipeline.pkl")
+    parser.add_argument("--dl_only", action="store_true")
+    parser.add_argument("--allow_synthetic", action="store_true", help="DEBUG ONLY")
+    parser.add_argument("--dl_device", choices=("cpu", "cuda", "auto"), default="cpu")
     args = parser.parse_args()
 
-    run_full_benchmark(test_dir=args.test_dir, vn_test_dir=args.vn_dir, output_dir=args.out)
+    run_full_benchmark(test_dir=args.test_dir, vn_test_dir=args.vn_dir, output_dir=args.out,
+                       svm_weights=args.ml_weights, dl_weights=args.dl_weights,
+                       dl_only=args.dl_only, allow_synthetic=args.allow_synthetic,
+                       dl_device=args.dl_device)

@@ -50,7 +50,7 @@ def load_models():
     """Initializes and caches both predictors."""
     svm_abs = resolve_path("weights/classical_svm_pipeline.pkl")
     p_ml = ClassicalPredictor(weight_path=svm_abs) if os.path.exists(svm_abs) else None
-    p_dl = DeepLearningPredictor(weight_path="weights/mobilenetv4_best.pth", fallback_mode=True)
+    p_dl = DeepLearningPredictor(weight_path="weights/mobilenetv4_best.pth", fallback_mode=False)
     return p_ml, p_dl
 
 

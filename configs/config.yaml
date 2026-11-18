@@ -70,7 +70,7 @@ classical:
 
 # Member 2: Deep Learning CNN Configuration
 deep_learning:
-  model_name: "mobilenetv4_conv_small"  # alternative: "resnet18", "efficientnet_b0"
+  model_name: "mobilenetv4_conv_small"  # alternative: "resnet18", "light_cnn"
   pretrained: true
   batch_size: 32
   num_workers: 2
