@@ -73,7 +73,7 @@ def run_webcam_split_demo(cam_index: int = None):
     print("    - Press 's' to snapshot test frame")
 
     p_ml = ClassicalPredictor(weight_path=svm_path)
-    p_dl = DeepLearningPredictor(weight_path=dl_path, fallback_mode=True)
+    p_dl = DeepLearningPredictor(weight_path=dl_path, fallback_mode=False)
 
     cap = cv2.VideoCapture(cam_index)
     use_synth = not cap.isOpened()

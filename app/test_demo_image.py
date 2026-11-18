@@ -46,7 +46,7 @@ def run_image_demo(image_path: str = None, save_out: str = "results/demo_visual_
     bgr_224 = cv2.cvtColor(rgb_224, cv2.COLOR_RGB2BGR)
 
     p_ml = ClassicalPredictor(weight_path="weights/classical_svm_pipeline.pkl")
-    p_dl = DeepLearningPredictor(weight_path="weights/mobilenetv4_best.pth", fallback_mode=True)
+    p_dl = DeepLearningPredictor(weight_path="weights/mobilenetv4_best.pth", fallback_mode=False)
 
     res_ml = p_ml.predict(rgb_224)
     res_dl = p_dl.predict(rgb_224)
