@@ -5,7 +5,8 @@ import sys
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT = SCRIPT_DIR if (SCRIPT_DIR / "data").is_dir() else SCRIPT_DIR.parent
 sys.path.insert(0, str(ROOT))
 
 import cv2
