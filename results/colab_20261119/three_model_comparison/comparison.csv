@@ -1,0 +1,4 @@
+model,n_test,accuracy_pct,macro_f1_pct,mean_latency_ms,median_latency_ms,p95_latency_ms,fps,checkpoint_mib,device,epochs
+light_cnn,716,76.257,75.809,9.397,8.658,12.309,106.42,4.893,cpu,14
+resnet18,716,93.575,93.524,60.74,56.556,82.758,16.464,42.724,cpu,13
+mobilenetv4_conv_small,716,89.525,89.518,16.828,15.364,23.649,59.427,9.736,cpu,15

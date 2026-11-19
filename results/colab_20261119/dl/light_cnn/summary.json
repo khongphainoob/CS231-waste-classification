@@ -1,0 +1,44 @@
+{
+  "model_name": "light_cnn",
+  "checkpoint": "/content/cs231_comparison/weights/light_cnn_best.pth",
+  "best_epoch": 14,
+  "best_val_macro_f1": 0.7823272920542018,
+  "best_val_loss": 0.6636590839265943,
+  "epochs_completed": 15,
+  "seed": 42,
+  "pretrained_initialization": false,
+  "data_audit": {
+    "split_root": "/content/cs231_comparison/data/standard_split",
+    "counts": {
+      "train": {
+        "cardboard": 560,
+        "glass": 560,
+        "metal": 537,
+        "paper": 560,
+        "plastic": 560,
+        "biological": 560
+      },
+      "val": {
+        "cardboard": 120,
+        "glass": 120,
+        "metal": 115,
+        "paper": 120,
+        "plastic": 120,
+        "biological": 120
+      },
+      "test": {
+        "cardboard": 120,
+        "glass": 120,
+        "metal": 116,
+        "paper": 120,
+        "plastic": 120,
+        "biological": 120
+      }
+    },
+    "manifest_sha256": "38fe0c6d1f67e073d1402f93e55ed1c5f05d5485ab1fe8d16897326a97839dba",
+    "n_files": 4768,
+    "synthetic_files": 0,
+    "cross_split_duplicates": 0
+  },
+  "device": "cuda"
+}
