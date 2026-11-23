@@ -94,7 +94,7 @@ def _weight_name(model_name):
 def train_cnn_model(config_path="configs/config.yaml", model_name=None, epochs=None,
                     batch_size=None, lr=None, freeze_epochs=0, patience=None,
                     workers=None, data_root=None, output_root=".", pretrained=None,
-                    allow_synthetic=False, seed=None):
+                    allow_synthetic=False, seed=None, label_smoothing=None):
     cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) if Path(config_path).exists() else {}
     cfg = cfg or {}
     dl_cfg = cfg.get("deep_learning", {})
@@ -105,6 +105,7 @@ def train_cnn_model(config_path="configs/config.yaml", model_name=None, epochs=N
     epochs = int(epochs if epochs is not None else dl_cfg.get("epochs", 30))
     batch_size = int(batch_size if batch_size is not None else dl_cfg.get("batch_size", 32))
     lr = float(lr if lr is not None else dl_cfg.get("learning_rate", .0003))
+    label_smoothing = float(label_smoothing if label_smoothing is not None else dl_cfg.get("label_smoothing", 0.0))
     patience = int(patience if patience is not None else dl_cfg.get("early_stopping_patience", 7))
     workers = int(workers if workers is not None else dl_cfg.get("num_workers", 0))
     seed = int(seed if seed is not None else cfg.get("project", {}).get("random_seed", 42))
@@ -130,7 +131,9 @@ def train_cnn_model(config_path="configs/config.yaml", model_name=None, epochs=N
     model = build_model(model_name, len(CLASS_NAMES), pretrained=pretrained).to(device)
     if freeze_epochs:
         set_backbone_trainable(model, model_name, False)
-    criterion = nn.CrossEntropyLoss()
+    if not 0.0 <= label_smoothing < 1.0:
+        raise ValueError("label_smoothing must be in [0, 1)")
+    criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr,
                                   weight_decay=float(dl_cfg.get("weight_decay", 1e-4)))
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
@@ -195,6 +198,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--batch_size", type=int, default=None)
     parser.add_argument("--lr", type=float, default=None)
+    parser.add_argument("--label_smoothing", type=float, default=None)
     parser.add_argument("--freeze_epochs", type=int, default=0)
     parser.add_argument("--patience", type=int, default=None)
     parser.add_argument("--workers", type=int, default=None)
@@ -209,4 +213,5 @@ if __name__ == "__main__":
                     patience=args.patience, workers=args.workers, data_root=args.data,
                     output_root=args.output_root,
                     pretrained=False if args.no_pretrained else None,
-                    allow_synthetic=args.allow_synthetic, seed=args.seed)
+                    allow_synthetic=args.allow_synthetic, seed=args.seed,
+                    label_smoothing=args.label_smoothing)
