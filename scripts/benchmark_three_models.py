@@ -24,6 +24,7 @@ OUT = ROOT / "results" / "three_model_comparison"
 CHECKPOINTS = {
     "light_cnn": ROOT / "weights" / "light_cnn_best.pth",
     "resnet18": ROOT / "weights" / "resnet18_best.pth",
+    "resnet50": ROOT / "weights" / "resnet50_best.pth",
     "mobilenetv4_conv_small": ROOT / "weights" / "mobilenetv4_best.pth",
 }
 

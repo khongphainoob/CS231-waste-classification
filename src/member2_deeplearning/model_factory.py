@@ -2,7 +2,7 @@
 import torch
 from torch import nn
 
-SUPPORTED_MODELS = ("light_cnn", "resnet18", "mobilenetv4_conv_small")
+SUPPORTED_MODELS = ("light_cnn", "resnet18", "resnet50", "mobilenetv4_conv_small")
 
 
 class LightWasteCNN(nn.Module):
@@ -60,7 +60,7 @@ def set_backbone_trainable(model, model_name, trainable):
 def gradcam_target_layer(model, model_name):
     if model_name == "light_cnn":
         return model.features[-1]
-    if model_name == "resnet18":
+    if model_name in ("resnet18", "resnet50"):
         return model.layer4[-1]
     if model_name == "mobilenetv4_conv_small":
         # timm MobileNetV4 ConvSmall is implemented as MobileNetV3, using
