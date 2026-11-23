@@ -1,0 +1,8 @@
+{
+  "dataset": "data/standard_split/test",
+  "n_test": 716,
+  "device": "cpu",
+  "warmup_calls": 3,
+  "timing": "preprocessing + forward; excludes disk I/O, resize and Grad-CAM",
+  "note": "Smoke comparison: LightWasteCNN and MobileNetV4 trained for one epoch locally; ResNet18 uses the existing epoch-13 checkpoint."
+}

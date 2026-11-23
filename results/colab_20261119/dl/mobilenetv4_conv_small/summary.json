@@ -1,0 +1,44 @@
+{
+  "model_name": "mobilenetv4_conv_small",
+  "checkpoint": "/content/cs231_comparison/weights/mobilenetv4_best.pth",
+  "best_epoch": 15,
+  "best_val_macro_f1": 0.9086239159030658,
+  "best_val_loss": 0.37370200917495977,
+  "epochs_completed": 15,
+  "seed": 42,
+  "pretrained_initialization": true,
+  "data_audit": {
+    "split_root": "/content/cs231_comparison/data/standard_split",
+    "counts": {
+      "train": {
+        "cardboard": 560,
+        "glass": 560,
+        "metal": 537,
+        "paper": 560,
+        "plastic": 560,
+        "biological": 560
+      },
+      "val": {
+        "cardboard": 120,
+        "glass": 120,
+        "metal": 115,
+        "paper": 120,
+        "plastic": 120,
+        "biological": 120
+      },
+      "test": {
+        "cardboard": 120,
+        "glass": 120,
+        "metal": 116,
+        "paper": 120,
+        "plastic": 120,
+        "biological": 120
+      }
+    },
+    "manifest_sha256": "38fe0c6d1f67e073d1402f93e55ed1c5f05d5485ab1fe8d16897326a97839dba",
+    "n_files": 4768,
+    "synthetic_files": 0,
+    "cross_split_duplicates": 0
+  },
+  "device": "cuda"
+}

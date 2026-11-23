@@ -1,0 +1,12 @@
+{
+  "source": "Google Colab uploaded result ZIP",
+  "dataset": "data/standard_split/test",
+  "n_test": 716,
+  "training_device": "cuda",
+  "benchmark_device": "cpu",
+  "epochs_completed": 15,
+  "warmup_calls": 3,
+  "timing": "preprocessing + forward; excludes disk I/O, resize and Grad-CAM",
+  "dataset_manifest_sha256": "38fe0c6d1f67e073d1402f93e55ed1c5f05d5485ab1fe8d16897326a97839dba",
+  "note": "Best checkpoints may come from an earlier epoch; each model completed 15 epochs."
+}
