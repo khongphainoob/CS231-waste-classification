@@ -5,5 +5,5 @@
   "device": "cpu",
   "warmup_calls": 3,
   "timing": "preprocessing + forward; excludes disk I/O, resize and Grad-CAM",
-  "note": "Latest Colab comparison includes the ResNet50 candidate. The CSV reports the best checkpoint epoch for each model; the original metadata note was stale and referred to an older one-epoch run."
+  "note": "Latest Colab comparison includes the ResNet50 candidate. The CSV reports the best checkpoint epoch for each model; the original metadata note was stale and referred to an older one-epoch run. TTA/ensemble results are stored separately under results/colab_20261123/tta_ensemble."
 }

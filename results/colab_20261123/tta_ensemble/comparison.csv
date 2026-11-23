@@ -1,0 +1,4 @@
+model,n_test,accuracy_pct,macro_f1_pct,mean_latency_ms,fps
+resnet50_hflip_tta,716,95.67,95.663,256.138,3.904
+mobilenetv4_conv_small_hflip_tta,716,93.575,93.555,33.941,29.463
+resnet50_mobilenetv4_hflip_ensemble,716,95.391,95.379,290.079,3.447
