@@ -1,0 +1,9 @@
+{
+  "source": "Google Colab uploaded result",
+  "dataset": "data/standard_split/test",
+  "n_test": 716,
+  "device": "cpu",
+  "warmup_calls": 3,
+  "timing": "preprocessing + forward; excludes disk I/O, resize and Grad-CAM",
+  "note": "The CSV reports the best checkpoint epoch for each model. The original metadata note was stale and referred to an older one-epoch run."
+}
